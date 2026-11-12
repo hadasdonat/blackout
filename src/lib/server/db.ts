@@ -50,8 +50,13 @@ CREATE TABLE IF NOT EXISTS answers (
 CREATE INDEX IF NOT EXISTS answers_wrong_by_level ON answers (level) WHERE NOT correct;
 `;
 
+/** Vercel's Neon integration may name the variable with a custom prefix. */
+export function databaseUrl(): string | undefined {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.NEON_DATABASE_URL || undefined;
+}
+
 async function connect(): Promise<Db> {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (url) {
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: url, max: 5, ssl: /sslmode=require|neon\.tech|supabase/.test(url) ? { rejectUnauthorized: false } : undefined });

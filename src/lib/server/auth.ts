@@ -9,7 +9,7 @@ function secret(): string {
   if (s && s.length >= 16) return s;
   // The database URL is already a server-only secret, so a key derived from it
   // keeps sessions signed when SESSION_SECRET is not configured.
-  const db = process.env.DATABASE_URL;
+  const db = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.NEON_DATABASE_URL;
   if (db) return createHash("sha256").update(`blackout-session:${db}`).digest("hex");
   if (process.env.NODE_ENV === "production") throw new Error("Set SESSION_SECRET or DATABASE_URL");
   return "development-only-secret-change-me";
