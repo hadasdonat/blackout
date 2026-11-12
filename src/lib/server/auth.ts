@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scryptAsync = promisify(scrypt) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
@@ -7,7 +7,11 @@ const scryptAsync = promisify(scrypt) as (pw: string, salt: Buffer, len: number)
 function secret(): string {
   const s = process.env.SESSION_SECRET;
   if (s && s.length >= 16) return s;
-  if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET must be set (at least 16 characters)");
+  // The database URL is already a server-only secret, so a key derived from it
+  // keeps sessions signed when SESSION_SECRET is not configured.
+  const db = process.env.DATABASE_URL;
+  if (db) return createHash("sha256").update(`blackout-session:${db}`).digest("hex");
+  if (process.env.NODE_ENV === "production") throw new Error("Set SESSION_SECRET or DATABASE_URL");
   return "development-only-secret-change-me";
 }
 const sign = (value: string) => createHmac("sha256", secret()).update(value).digest("base64url");

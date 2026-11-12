@@ -1,4 +1,5 @@
 import "server-only";
+import { HttpError } from "./http";
 
 /**
  * A tiny database adapter. Production uses Postgres through `pg`
@@ -61,6 +62,7 @@ async function connect(): Promise<Db> {
     await db.exec(SCHEMA);
     return db;
   }
+  if (process.env.VERCEL) throw new HttpError(503, "מסד הנתונים עוד לא מחובר לאתר. מנהלת האתר צריכה לחבר אותו ב-Vercel.");
   const { PGlite } = await import("@electric-sql/pglite");
   const dir = process.env.PGLITE_DIR ?? (process.env.NODE_ENV === "test" ? undefined : "./.data/pglite");
   const lite = new PGlite(dir);
@@ -74,7 +76,7 @@ async function connect(): Promise<Db> {
 
 const g = globalThis as unknown as { __blackoutDb?: Promise<Db> };
 export function getDb(): Promise<Db> {
-  g.__blackoutDb ??= connect();
+  g.__blackoutDb ??= connect().catch((e) => { g.__blackoutDb = undefined; throw e; });
   return g.__blackoutDb;
 }
 /** Tests only: start from an empty database. */

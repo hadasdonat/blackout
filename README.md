@@ -74,10 +74,10 @@ Tests prove every practice task is solvable from its own evidence and every inci
 
 ## Deploy
 
-1. Create a free Postgres database on [Neon](https://neon.tech) or [Supabase](https://supabase.com) and copy its connection string.
-2. Import the repository into [Vercel](https://vercel.com).
-3. Set `DATABASE_URL`, `SESSION_SECRET` (`openssl rand -hex 32`) and `ADMIN_PASSWORD`.
-4. Deploy. Tables are created on first request.
+1. Import the repository into [Vercel](https://vercel.com).
+2. In the project, open **Storage** and connect a free Neon Postgres database. Vercel sets `DATABASE_URL` for you.
+3. Optionally set `ADMIN_PASSWORD` (for `/admin`) and `SESSION_SECRET` (`openssl rand -hex 32`). Without `SESSION_SECRET`, sessions are signed with a key derived from `DATABASE_URL`.
+4. Redeploy. Tables are created on the first request.
 
 The rate limiter is in memory, which suits a single instance. For several instances, move it to Redis.
 
