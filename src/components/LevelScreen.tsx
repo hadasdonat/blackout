@@ -10,6 +10,7 @@ import { FailChart } from "./FailChart";
 import { Terminal, type TerminalHandle } from "./Terminal";
 import { Tutor } from "./Tutor";
 import { newCommands, reviewCommands, stageQuiz } from "@/lib/game/review";
+import type { Mode } from "@/lib/game/modes";
 
 const BASE_CHIPS: [string, string][] = [["ls", "מציגה את הקבצים בתיקייה"], ["cat README.txt", "מציגה את קובץ ההסבר"], ["help", "רשימה קצרה של כל הפקודות"], ["clear", "מנקה את המסך"]];
 
@@ -18,7 +19,7 @@ export interface LevelApi {
   hint(): Promise<string | null>;
   secret(file: string): Promise<boolean>;
 }
-interface Props { level: Level; api: LevelApi; hints: string[]; hintsLeft: number; solved: boolean }
+interface Props { level: Level; api: LevelApi; hints: string[]; hintsLeft: number; solved: boolean; mode: Mode }
 
 /** Lesson text and Noa's line are our own static content, so rendering them as HTML is safe. */
 const Html = ({ html, className }: { html: string; className?: string }) => <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
@@ -33,7 +34,9 @@ function Typewriter({ text }: { text: string }) {
   return <>{text.slice(0, shown)}</>;
 }
 
-export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
+export function LevelScreen({ level, api, hints, hintsLeft, solved, mode }: Props) {
+  const fmtPenalty = (s: number) => { const t = Math.round(s * mode.penalty); return t % 60 === 0 ? `${t / 60 === 1 ? "דקה" : `${t / 60} דקות`}` : `${t} שניות`; };
+  const tag = (s: number) => { const t = Math.round(s * mode.penalty); return `-${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; };
   const term = useRef<TerminalHandle>(null);
   const [tab, setTab] = useState<"stage" | "ask" | "dict">("stage");
   const [answer, setAnswer] = useState("");
@@ -64,18 +67,18 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
       if (!res) return;
       setFeedback({ ok: res.correct, text: res.correct ? `נכון! ${res.feedback}` : res.feedback });
       if (res.correct) term.current?.print(`✓ ${levelLabel(level)} הושלם`, "sys");
-      else { setShake((s) => s + 1); sfx("bad"); if (final) term.current?.print(`${res.feedback}  -01:00`, "err"); }
+      else { setShake((s) => s + 1); sfx("bad"); if (final) term.current?.print(`${res.feedback}  ${tag(60)}`, "err"); }
     } finally { setBusy(false); }
   }
 
   async function hint() {
     const text = await api.hint();
     if (text && !final) term.current?.print("רמז נפתח בתיק שבצד", "sys");
-    if (text && final) term.current?.print(`רמז ${hints.length + 1} נפתח בתיק  -02:00`, "sys");
+    if (text && final) term.current?.print(`רמז ${hints.length + 1} נפתח  ${tag(120)}`, "sys");
   }
 
   function onAction(a: Action) {
-    if (a.type === "hint") void hint();
+    if (a.type === "hint") { if (mode.hints) void hint(); else term.current?.print("ברמת מומחים אין רמזים. אפשר לשאול את נועה.", "err"); }
     else if (a.type === "submit") {
       if (!final) term.current?.print("במשימות התרגול עונים בתרגיל שבצד.", "err");
       else if (a.args.length !== 2) term.current?.print("usage: submit A B", "err");
@@ -123,7 +126,7 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
                   {hints.length === 0 ? "צריכים עזרה? קבלו רמז" : "עדיין תקועים? הראו לי את הפקודה"}
                 </button>
               )}
-              <p className="label">רמז מוריד כוכב אחד, אבל אין הגבלה על ניסיונות. שאלות לנועה לא עולות כלום: <button className="linkish" type="button" onClick={() => setTab("ask")}>שאלו אותה</button></p>
+              <p className="label">{mode.freeHints ? "ברמת מתחילים רמזים לא מורידים כוכבים" : "רמז מוריד כוכב אחד"}, ואין הגבלה על ניסיונות. שאלות לנועה לא עולות כלום: <button className="linkish" type="button" onClick={() => setTab("ask")}>שאלו אותה</button></p>
             </div>
           )}
           {final && (
@@ -146,10 +149,15 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
               </form>
               <section className="lesson">
                 <h2>רמזים</h2>
-                <ol className="hints">{hints.map((h) => <li key={h}><Html html={h} /></li>)}</ol>
-                <button className="ghost" type="button" disabled={hintsLeft === 0 || solved} onClick={() => void hint()}>
-                  {hintsLeft === 0 ? "אין עוד רמזים" : `פתחו רמז ${hints.length + 1} מתוך 3 (מוריד 2 דקות)`}
-                </button>
+                {mode.hints ? (
+                  <>
+                    <ol className="hints">{hints.map((h) => <li key={h}><Html html={h} /></li>)}</ol>
+                    <button className="ghost" type="button" disabled={hintsLeft === 0 || solved} onClick={() => void hint()}>
+                      {hintsLeft === 0 ? "אין עוד רמזים" : `פתחו רמז ${hints.length + 1} מתוך 3 (מוריד ${fmtPenalty(120)})`}
+                    </button>
+                    <p className="label">תשובה שגויה מורידה {fmtPenalty(60)} מהשעון.</p>
+                  </>
+                ) : <p className="label">ברמת מומחים אין רמזים, ותשובה שגויה מורידה {fmtPenalty(60)}. נועה עדיין כאן בלשונית &quot;שאלו את נועה&quot;.</p>}
               </section>
             </>
           )}

@@ -24,11 +24,20 @@ export const PLAYER_COOKIE = "bo_session";
 export const ADMIN_COOKIE = "bo_admin";
 const ADMIN_TTL_MS = 12 * 60 * 60 * 1000;
 
-export const playerToken = (id: string) => `${id}.${sign(`player:${id}`)}`;
-export function readPlayerToken(token: string | undefined): string | null {
+const PLAYER_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+
+/**
+ * A player session is `id.version.issuedAt.signature`. The version lives in the
+ * database and goes up when the password changes, which signs out every other
+ * device; sessions also expire after 60 days.
+ */
+export const playerToken = (id: string, version: number, now = Date.now()) => `${id}.${version}.${now}.${sign(`player:${id}:${version}:${now}`)}`;
+export function readPlayerToken(token: string | undefined, now = Date.now()): { id: string; version: number } | null {
   if (!token) return null;
-  const [id, sig] = token.split(".");
-  return id && sig && safeEqual(sig, sign(`player:${id}`)) ? id : null;
+  const [id, ver, iat, sig] = token.split(".");
+  const version = Number(ver), issued = Number(iat);
+  if (!id || !sig || !Number.isInteger(version) || !Number.isFinite(issued) || now - issued > PLAYER_TTL_MS || issued - now > 60_000) return null;
+  return safeEqual(sig, sign(`player:${id}:${version}:${issued}`)) ? { id, version } : null;
 }
 
 export function adminToken(now = Date.now()) { return `${now}.${sign(`admin:${now}`)}`; }
@@ -38,21 +47,26 @@ export function readAdminToken(token: string | undefined, now = Date.now()): boo
   const issued = Number(ts);
   return !!sig && Number.isFinite(issued) && now - issued < ADMIN_TTL_MS && safeEqual(sig, sign(`admin:${ts}`));
 }
+export const ADMIN_PASSWORD_MIN = 10;
 export function checkAdminPassword(given: string): boolean {
   const real = process.env.ADMIN_PASSWORD;
-  if (!real) return false;
+  if (!real || real.length < ADMIN_PASSWORD_MIN) return false;
   return safeEqual(sign(`pw:${given}`), sign(`pw:${real}`));
 }
 
-/** PINs are hashed with scrypt and a per-player salt. */
-export async function hashPin(pin: string) {
+/** Passwords are hashed with scrypt and a per-player salt; the plain text is never stored. */
+export async function hashPassword(password: string) {
   const salt = randomBytes(16);
-  const hash = await scryptAsync(pin, salt, 32);
+  const hash = await scryptAsync(password, salt, 32);
   return `scrypt$${salt.toString("base64url")}$${hash.toString("base64url")}`;
 }
-export async function verifyPin(pin: string, stored: string) {
+export async function verifyPassword(password: string, stored: string) {
   const [, salt, hash] = stored.split("$");
   if (!salt || !hash) return false;
-  const got = await scryptAsync(pin, Buffer.from(salt, "base64url"), 32);
+  const got = await scryptAsync(password, Buffer.from(salt, "base64url"), 32);
   return safeEqual(got.toString("base64url"), hash);
 }
+
+/** Spends the same time as a real check, so a missing account can't be told apart by timing. */
+const DUMMY = "scrypt$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+export const verifyNothing = (password: string) => verifyPassword(password, DUMMY).then(() => false);

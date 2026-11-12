@@ -8,7 +8,7 @@ import { LEVEL_COUNT, LEVELS } from "@/lib/game/levels";
 interface LevelStat { n: number; room: number; idx: number; title: string; started: number; completed: number; runs: number; avgMs: number | null; avgWrong: number; avgHints: number; expired: number; topWrong: { answer: string; count: number }[]; questions: number }
 interface Overview {
   levels: LevelStat[];
-  players: { id: string; nickname: string; joinedAt: string; lastSeen: string; online: boolean; location: string; progress: Progress }[];
+  players: { id: string; nickname: string; joinedAt: string; lastSeen: string; online: boolean; location: string; progress: Progress; mode: string }[];
   questions: { nickname: string; level: number; question: string; ai: boolean; at: string }[];
   tutorAi: boolean;
 }
@@ -119,13 +119,14 @@ export function AdminDashboard() {
         <h3>כל המשתמשים</h3>
         <div className="tablewrap">
           <table className="board">
-            <thead><tr><th>שם</th><th>מצב</th>{LEVELS.map((l) => <th key={l.n}>{l.room}.{l.idx}</th>)}<th>שלבים</th><th>זמן כולל</th><th>הצטרפות</th></tr></thead>
+            <thead><tr><th>שם</th><th>רמה</th><th>מצב</th>{LEVELS.map((l) => <th key={l.n}>{l.room}.{l.idx}</th>)}<th>שלבים</th><th>זמן כולל</th><th>הצטרפות</th></tr></thead>
             <tbody>
               {players.map((p) => {
                 const t = totals(p.progress);
                 return (
                   <tr key={p.id}>
                     <td>{p.nickname}</td>
+                    <td>{p.mode}</td>
                     <td>{p.online ? <><i className="dot inline" /> {p.location}</> : <span className="label">{ago(p.lastSeen)}</span>}</td>
                     {LEVELS.map((l) => <td key={l.n} className="st">{p.progress[l.n] ? "★".repeat(p.progress[l.n]!.stars) : <span className="label">–</span>}</td>)}
                     <td className="num">{t.done}/{LEVEL_COUNT}</td>

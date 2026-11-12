@@ -11,7 +11,7 @@ const Schema = z.object({
 });
 
 export const POST = route(async (req: Request, ctx: LevelParams) => {
-  const player = requirePlayer(req);
+  const player = await requirePlayer(req);
   limit(`ask:${player}`, 12, 5 * 60_000);
   const { messages, terminal } = await body(req, Schema);
   if (messages.at(-1)!.content.length > 800) return json({ error: "השאלה ארוכה מדי. נסו לקצר אותה." }, { status: 400 });

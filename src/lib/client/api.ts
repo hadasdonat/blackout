@@ -1,6 +1,10 @@
 export interface Progress { [level: number]: { stars: number; ms: number } }
-export interface Me { id: string; nickname: string; progress: Progress }
-export interface Board { rows: { id: string; nickname: string; done: number; stars: number; totalMs: number }[]; online: { nickname: string; location: string }[]; levels: number }
+import type { ModeId } from "@/lib/game/modes";
+export interface Me {
+  id: string; nickname: string; progress: Progress; mode: ModeId; weakPassword: boolean;
+  modes: Record<ModeId, { done: number; stars: number; total: number }>;
+}
+export interface Board { mode: ModeId; rows: { id: string; nickname: string; done: number; stars: number; totalMs: number }[]; online: { nickname: string; location: string }[]; levels: number }
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

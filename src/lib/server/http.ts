@@ -28,16 +28,27 @@ export function cookie(name: string, value: string, maxAgeS: number) {
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeS}${secure}`;
 }
 
+const MAX_BODY = 32 * 1024;
+
 export async function body<T extends z.ZodType>(req: Request, schema: T): Promise<z.output<T>> {
-  const parsed = schema.safeParse(await req.json().catch(() => null));
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY) throw new HttpError(413, "הבקשה גדולה מדי");
+  const text = await req.text().catch(() => "");
+  if (text.length > MAX_BODY) throw new HttpError(413, "הבקשה גדולה מדי");
+  let data: unknown = null;
+  try { data = JSON.parse(text); } catch { /* reported below */ }
+  const parsed = schema.safeParse(data);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? "Invalid request");
   return parsed.data;
 }
 
-export function requirePlayer(req: Request): string {
-  const id = readPlayerToken(cookies(req)[PLAYER_COOKIE]);
-  if (!id) throw new HttpError(401, "צריך להתחבר כדי לשחק");
-  return id;
+/** Checks the signed session cookie and that it was not revoked by a password change. */
+export async function requirePlayer(req: Request): Promise<string> {
+  const token = readPlayerToken(cookies(req)[PLAYER_COOKIE]);
+  if (!token) throw new HttpError(401, "צריך להתחבר כדי לשחק");
+  const { getDb } = await import("./db");
+  const [row] = await (await getDb()).query<{ session_version: number }>("SELECT session_version FROM players WHERE id = $1", [token.id]);
+  if (!row || row.session_version !== token.version) throw new HttpError(401, "החיבור פג. התחברו מחדש.");
+  return token.id;
 }
 export function requireAdmin(req: Request) {
   if (!process.env.ADMIN_PASSWORD) throw new HttpError(503, "ADMIN_PASSWORD is not configured");
@@ -45,17 +56,33 @@ export function requireAdmin(req: Request) {
 }
 
 export function clientIp(req: Request) {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  // On Vercel, x-real-ip is set by the platform and cannot be spoofed by the client.
+  return (req.headers.get("x-real-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0])?.trim().slice(0, 64) || "local";
+}
+
+/**
+ * Blocks cross-site requests: a state-changing call must come from this site.
+ * Browsers always send Origin on cross-site POSTs, so a missing header means a
+ * same-origin request or a non-browser client, both fine.
+ */
+export function checkOrigin(req: Request) {
+  if (req.method === "GET" || req.method === "HEAD") return;
+  const origin = req.headers.get("origin");
+  if (!origin) return;
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  let originHost = "";
+  try { originHost = new URL(origin).host; } catch { /* invalid */ }
+  if (!host || originHost !== host) throw new HttpError(403, "הבקשה נחסמה");
 }
 
 /** Wraps a route handler: turns HttpError into a JSON response, hides anything else. */
 export function route<A extends unknown[]>(fn: (req: Request, ...rest: A) => Promise<Response>) {
   return async (req: Request, ...rest: A) => {
-    try { return await fn(req, ...rest); }
+    try { checkOrigin(req); return await fn(req, ...rest); }
     catch (e) {
       if (e instanceof HttpError) return json({ error: e.message }, { status: e.status });
       console.error(e);
-      return json({ error: "Something went wrong on our side" }, { status: 500 });
+      return json({ error: "משהו השתבש אצלנו. נסו שוב בעוד רגע." }, { status: 500 });
     }
   };
 }

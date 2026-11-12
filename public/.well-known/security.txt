@@ -1,0 +1,4 @@
+# Found a security problem in Blackout? Please report it privately.
+Contact: https://github.com/hadasdonat/blackout/security/advisories/new
+Preferred-Languages: he, en
+Expires: 2027-12-31T00:00:00.000Z

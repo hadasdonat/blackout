@@ -20,7 +20,7 @@ const lvl = (n: number) => ({ params: Promise.resolve({ n: String(n) }) });
 const cookieOf = (res: Response) => res.headers.get("set-cookie")!.split(";")[0]!;
 
 async function player(nickname = "hadas") {
-  const res = await session(req({ mode: "register", nickname, pin: "1234" }));
+  const res = await session(req({ mode: "register", nickname, password: "Secret123", level: "intermediate" }));
   expect(res.status).toBe(200);
   return cookieOf(res);
 }
@@ -34,16 +34,16 @@ import { FINAL, PRACTICE } from "./fixtures";
 beforeEach(() => { resetDbForTests(); resetLimitsForTests(); });
 
 describe("players", () => {
-  it("rejects a taken nickname and a wrong PIN, and signs in with the right one", async () => {
+  it("rejects a taken nickname and a wrong password, and signs in with the right one", async () => {
     await player("hadas");
-    expect((await session(req({ mode: "register", nickname: "HADAS", pin: "9999" }))).status).toBe(409);
-    expect((await session(req({ mode: "login", nickname: "hadas", pin: "0000" }))).status).toBe(401);
-    expect((await session(req({ mode: "login", nickname: "Hadas", pin: "1234" }))).status).toBe(200);
+    expect((await session(req({ mode: "register", nickname: "HADAS", password: "Other4567" }))).status).toBe(409);
+    expect((await session(req({ mode: "login", nickname: "hadas", password: "Wrong1234" }))).status).toBe(401);
+    expect((await session(req({ mode: "login", nickname: "Hadas", password: "Secret123" }))).status).toBe(200);
   });
 
   it("validates input", async () => {
-    expect((await session(req({ mode: "register", nickname: "<script>", pin: "1234" }))).status).toBe(400);
-    expect((await session(req({ mode: "register", nickname: "ok name", pin: "12" }))).status).toBe(400);
+    expect((await session(req({ mode: "register", nickname: "<script>", password: "Secret123" }))).status).toBe(400);
+    expect((await session(req({ mode: "register", nickname: "ok name", password: "12" }))).status).toBe(400);
   });
 
   it("requires a session to play", async () => {

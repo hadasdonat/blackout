@@ -4,7 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type Board, type Me } from "@/lib/client/api";
 import { mmss, totals } from "@/lib/client/format";
 import { confetti, loadSound, reducedMotion, setSound, sfx } from "@/lib/client/fx";
-import { LEVEL_COUNT, LEVELS } from "@/lib/game/levels";
+import { LEVELS } from "@/lib/game/levels";
+import { MODES, modeLevels, nextLevel, type ModeId } from "@/lib/game/modes";
+import { Account } from "./Account";
+import { ModePicker } from "./ModePicker";
+import { WorldMap, isOpen } from "./WorldMap";
 import { DoneModal, LoseModal, type DoneInfo } from "./DoneModal";
 import { Intro } from "./Intro";
 import { Leaderboard } from "./Leaderboard";
@@ -30,6 +34,7 @@ export function Game() {
   const [paused, setPaused] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
+  const [account, setAccount] = useState(false);
   const fx = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -41,7 +46,9 @@ export function Game() {
   const level = run ? LEVELS[run.n - 1]! : null;
   const where = level ? `שלב ${level.room} משימה ${level.idx}` : "במפה";
 
-  const refreshBoard = useCallback(() => { api<Board>("/api/leaderboard").then(setBoard).catch(() => {}); }, []);
+  const modeId: ModeId = me?.mode ?? "beginner";
+  const mode = MODES[modeId];
+  const refreshBoard = useCallback(() => { api<Board>(`/api/leaderboard?mode=${modeId}`).then(setBoard).catch(() => {}); }, [modeId]);
   useEffect(() => {
     if (!me) return;
     refreshBoard();
@@ -128,11 +135,18 @@ export function Game() {
     },
   };
 
+  async function switchMode(m: ModeId) {
+    if (!me || m === me.mode) return;
+    try { setMe(await api<Me>("/api/mode", { mode: m })); sfx("click"); } catch (e) { fail(e); }
+  }
+
   function goMap() { setPaused(null); setRun(null); setDone(null); setLost(false); refreshBoard(); scrollTo(0, 0); }
   async function logout() { await api("/api/logout", {}).catch(() => {}); setMe(null); setRun(null); }
 
   if (loading) return <div className="wrap"><p className="label">טוען...</p></div>;
   const t = me ? totals(me.progress) : null;
+  const list = modeLevels(modeId);
+  const nextUp = me ? list.find((l) => !me.progress[l.n] && isOpen(modeId, me.progress, l.n)) : undefined;
 
   return (
     <div className="wrap">
@@ -148,6 +162,7 @@ export function Game() {
               <button className="clockbtn" type="button" onClick={() => void togglePause(paused === null)} aria-label={paused === null ? "עצירת הזמן" : "המשך הזמן"} title={paused === null ? "עצירת הזמן" : "המשך הזמן"}>{paused === null ? "⏸" : "▶"}</button>
             </div>
           )}
+          {me && <span className="pill" title={`רמת ${mode.name}`}>{mode.icon} {mode.name}</span>}
           {me && <span className="pill"><span className="star">★</span><b>{t!.stars}</b></span>}
           {me && <button className="pill" type="button" onClick={() => { refreshBoard(); setShowBoard(true); }}>טבלת המובילים</button>}
           <button className="pill" type="button" aria-pressed={big} onClick={() => { const v = !big; setBig(v); document.documentElement.classList.toggle("big", v); try { localStorage.setItem("blackout.big", v ? "1" : "0"); } catch { /* ignore */ } }}>טקסט גדול</button>
@@ -162,9 +177,24 @@ export function Game() {
       {me && !run && (
         <main className="mapgrid">
           <section className="mapcol" aria-label="מפת השלבים">
-            <h2>מפת הלמידה</h2>
-            <p className="label">לחצו על השלב המהבהב כדי להתחיל</p>
-            <LevelMap progress={me.progress} onOpen={(n) => void openLevel(n)} />
+            {me.weakPassword && (
+              <div className="note warn" role="status">
+                <span>החשבון שלכם מוגן רק בקוד של 4 ספרות. כדאי לבחור סיסמה חזקה, זה לוקח חצי דקה.</span>
+                <button className="ghost" type="button" onClick={() => setAccount(true)}>בחירת סיסמה</button>
+              </div>
+            )}
+            <div className="maphead">
+              <div>
+                <h2>מפת הלמידה</h2>
+                <p className="label">רמת {mode.name} · {t!.done}/{list.length} משימות · {t!.stars}★</p>
+              </div>
+              {nextUp
+                ? <button className="primary big next" type="button" onClick={() => void openLevel(nextUp.n)}>▶ {t!.done ? "ממשיכים" : "מתחילים"}: {nextUp.final ? `אתגר שלב ${nextUp.room}` : nextUp.title}</button>
+                : <span className="pill won">🏆 סיימתם את רמת {mode.name}!</span>}
+            </div>
+            <ModePicker value={modeId} onChange={(m) => void switchMode(m)} summary={me.modes} compact />
+            <div className="only-desktop"><WorldMap mode={modeId} progress={me.progress} onOpen={(n) => void openLevel(n)} /></div>
+            <div className="only-mobile"><LevelMap mode={modeId} progress={me.progress} onOpen={(n) => void openLevel(n)} /></div>
           </section>
           <aside className="side">
             <section className="card">
@@ -172,10 +202,18 @@ export function Game() {
                 <div className="avatar" aria-hidden="true">{me.nickname.charAt(0)}</div>
                 <div>
                   <b>{me.nickname}</b>
-                  <div className="meta"><span>שלבים <b>{t!.done}/{LEVEL_COUNT}</b></span><span>כוכבים <b>{t!.stars}</b></span><span>זמן <b>{mmss(t!.ms)}</b></span></div>
+                  <div className="meta"><span>משימות <b>{t!.done}/{list.length}</b></span><span>כוכבים <b>{t!.stars}</b></span><span>זמן <b>{mmss(t!.ms)}</b></span></div>
                 </div>
               </div>
-              <button className="ghost" type="button" onClick={() => void logout()}>התנתקות</button>
+              <span className="bar xp" aria-hidden="true"><i style={{ width: `${(t!.done / list.length) * 100}%` }} /></span>
+              {account
+                ? <Account nickname={me.nickname} onDone={() => { setAccount(false); void api<Me>("/api/me").then(setMe).catch(() => {}); }} />
+                : (
+                  <div className="actions">
+                    <button className="ghost" type="button" onClick={() => setAccount(true)}>שינוי סיסמה</button>
+                    <button className="ghost" type="button" onClick={() => void logout()}>התנתקות</button>
+                  </div>
+                )}
             </section>
             <section className="card">
               <h3>מחוברים עכשיו</h3>
@@ -185,7 +223,7 @@ export function Game() {
               </ul>
             </section>
             <section className="card">
-              <h3>המובילים</h3>
+              <h3>המובילים · {mode.icon} {mode.name}</h3>
               <table className="mini"><tbody>
                 {(board?.rows ?? []).slice(0, 5).map((r, i) => (
                   <tr key={r.id} className={r.id === me.id ? "mine" : ""}><td>{i + 1}</td><td>{r.nickname}</td><td className="num">{r.stars}★ · {mmss(r.totalMs)}</td></tr>
@@ -198,15 +236,15 @@ export function Game() {
       )}
 
       {me && run && level && (
-        <LevelScreen key={run.attemptId} level={level} api={levelApi} hints={run.hints} hintsLeft={(level.final ? 3 : 2) - run.hints.length} solved={run.solved} />
+        <LevelScreen key={run.attemptId} level={level} api={levelApi} hints={run.hints} hintsLeft={mode.hints ? (level.final ? 3 : 2) - run.hints.length : 0} solved={run.solved} mode={mode} />
       )}
 
       {done && me && (
-        <DoneModal info={done} nickname={me.nickname} hasNext={done.level.n < LEVEL_COUNT}
-          onNext={() => void openLevel(done.level.n + 1)} onMap={goMap} onBoard={() => { goMap(); setShowBoard(true); }} />
+        <DoneModal info={done} nickname={me.nickname} hasNext={nextLevel(modeId, done.level.n) !== null}
+          onNext={() => void openLevel(nextLevel(modeId, done.level.n)!)} onMap={goMap} onBoard={() => { goMap(); setShowBoard(true); }} />
       )}
       {lost && level && <LoseModal level={level} onRetry={() => void openLevel(level.n)} onMap={goMap} />}
-      {showBoard && <Leaderboard board={board} meId={me?.id} onClose={() => setShowBoard(false)} />}
+      {showBoard && <Leaderboard initial={modeId} meId={me?.id} onClose={() => setShowBoard(false)} />}
       <canvas className="fx" ref={fx} aria-hidden="true" />
     </div>
   );

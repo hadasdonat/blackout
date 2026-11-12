@@ -1,56 +1,149 @@
 import "server-only";
 import { SECRET_FILES } from "@/lib/game/evidence";
-import { LEVEL_COUNT, LEVELS } from "@/lib/game/levels";
+import { LEVELS } from "@/lib/game/levels";
 import { checkFinal, checkPractice, HINT_PENALTY_S, hintFor, keyFor, SECRET_BONUS_S, starsFor, WRONG_PENALTY_S } from "./answers";
-import { hashPin, verifyPin } from "./auth";
+import { hashPassword, verifyNothing, verifyPassword } from "./auth";
+import { isMode, MODE_IDS, MODES, previousLevel, type ModeId } from "@/lib/game/modes";
+import { normalizeNickname, passwordProblem, reservedNickname } from "@/lib/game/password";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { aiConfigured, offlineAnswer, tutorReply, type ChatMsg } from "./tutor";
 
 export interface Progress { [level: number]: { stars: number; ms: number } }
 interface AttemptRow {
-  id: string; player_id: string; level: number; started_at: Date; deadline_at: Date | null;
+  id: string; player_id: string; level: number; mode: ModeId; started_at: Date; deadline_at: Date | null;
   completed_at: Date | null; failed_at: Date | null; paused_at: Date | null; wrong: number; hints: number; bonus_used: boolean;
 }
 
 const BEST = `
-  SELECT DISTINCT ON (player_id, level) player_id, level, stars, duration_ms
+  SELECT DISTINCT ON (player_id, mode, level) player_id, mode, level, stars, duration_ms
   FROM attempts WHERE completed_at IS NOT NULL
-  ORDER BY player_id, level, stars DESC, duration_ms ASC`;
+  ORDER BY player_id, mode, level, stars DESC, duration_ms ASC`;
 
 /* ---------------- players ---------------- */
 
-export async function register(nickname: string, pin: string) {
+const LOCK_MINUTES = 15;
+const MAX_FAILS_PER_NAME = 5;
+const MAX_FAILS_PER_IP = 25;
+
+/** Failed sign-ins are counted in the database, so the lockout holds across every server instance. */
+async function failures(key: string) {
   const db = await getDb();
-  const taken = await db.query("SELECT 1 FROM players WHERE lower(nickname) = lower($1)", [nickname]);
-  if (taken.length) throw new HttpError(409, "השם הזה כבר תפוס. נסו שם אחר, או התחברו עם הקוד שלכם.");
-  const [row] = await db.query<{ id: string }>("INSERT INTO players (nickname, pin_hash) VALUES ($1, $2) RETURNING id", [nickname, await hashPin(pin)]);
-  return row!.id;
+  const [r] = await db.query<{ c: number }>(`SELECT COUNT(*)::int AS c FROM auth_failures WHERE key = $1 AND at > now() - interval '${LOCK_MINUTES} minutes'`, [key]);
+  return r?.c ?? 0;
+}
+export async function guardAttempts(keys: { key: string; max: number; message: string }[]) {
+  for (const k of keys) if ((await failures(k.key)) >= k.max) throw new HttpError(429, k.message);
+}
+export async function recordFailure(...keys: string[]) {
+  const db = await getDb();
+  for (const key of keys) await db.query("INSERT INTO auth_failures (key) VALUES ($1)", [key]);
+  await db.query("DELETE FROM auth_failures WHERE at < now() - interval '1 day'");
 }
 
-export async function login(nickname: string, pin: string) {
+export async function register(nicknameRaw: string, password: string, mode: ModeId) {
+  const nickname = normalizeNickname(nicknameRaw);
+  if (reservedNickname(nickname)) throw new HttpError(409, "השם הזה שמור. בחרו שם אחר.");
+  const problem = passwordProblem(password, nickname);
+  if (problem) throw new HttpError(400, `הסיסמה צריכה: ${problem}`);
+  const db = await getDb();
+  const taken = await db.query("SELECT 1 FROM players WHERE lower(nickname) = lower($1)", [nickname]);
+  if (taken.length) throw new HttpError(409, "השם הזה כבר תפוס. נסו שם אחר, או התחברו אם זה החשבון שלכם.");
+  try {
+    const [row] = await db.query<{ id: string }>("INSERT INTO players (nickname, pin_hash, mode) VALUES ($1, $2, $3) RETURNING id", [nickname, await hashPassword(password), mode]);
+    return row!.id;
+  } catch (e) {
+    // Two sign-ups racing for the same name: the unique index decides.
+    if ((e as { code?: string }).code === "23505") throw new HttpError(409, "השם הזה כבר תפוס. נסו שם אחר.");
+    throw e;
+  }
+}
+
+export async function login(nicknameRaw: string, password: string, ip: string) {
+  const nickname = normalizeNickname(nicknameRaw);
+  const nameKey = `name:${nickname.toLowerCase()}`, ipKey = `ip:${ip}`;
+  await guardAttempts([
+    { key: nameKey, max: MAX_FAILS_PER_NAME, message: `יותר מדי ניסיונות כניסה לחשבון הזה. הוא נעול ל-${LOCK_MINUTES} דקות.` },
+    { key: ipKey, max: MAX_FAILS_PER_IP, message: `יותר מדי ניסיונות כניסה מהרשת שלכם. נסו שוב בעוד ${LOCK_MINUTES} דקות.` },
+  ]);
   const db = await getDb();
   const [row] = await db.query<{ id: string; pin_hash: string }>("SELECT id, pin_hash FROM players WHERE lower(nickname) = lower($1)", [nickname]);
-  if (!row || !(await verifyPin(pin, row.pin_hash))) throw new HttpError(401, "השם או הקוד לא נכונים.");
+  const ok = row ? await verifyPassword(password, row.pin_hash) : await verifyNothing(password);
+  if (!row || !ok) {
+    await recordFailure(nameKey, ipKey);
+    throw new HttpError(401, "השם או הסיסמה לא נכונים.");
+  }
+  await db.query("DELETE FROM auth_failures WHERE key = $1", [nameKey]);
+  // Old accounts used a 4-digit code: let them in, and ask them to pick a real password.
+  await db.query("UPDATE players SET weak_password = $2 WHERE id = $1", [row.id, passwordProblem(password, nickname) !== null]);
   return row.id;
 }
 
-export async function progressOf(playerId: string): Promise<Progress> {
+export async function sessionVersion(playerId: string) {
   const db = await getDb();
-  const rows = await db.query<{ level: number; stars: number; duration_ms: number }>(`SELECT level, stars, duration_ms FROM (${BEST}) b WHERE player_id = $1`, [playerId]);
+  const [r] = await db.query<{ session_version: number }>("SELECT session_version FROM players WHERE id = $1", [playerId]);
+  return r?.session_version ?? 0;
+}
+
+/** Changing the password signs out every other device by bumping the session version. */
+export async function changePassword(playerId: string, current: string, next: string) {
+  const db = await getDb();
+  const [row] = await db.query<{ nickname: string; pin_hash: string }>("SELECT nickname, pin_hash FROM players WHERE id = $1", [playerId]);
+  if (!row) throw new HttpError(401, "החשבון לא נמצא. התחברו מחדש.");
+  const key = `change:${playerId}`;
+  await guardAttempts([{ key, max: MAX_FAILS_PER_NAME, message: `יותר מדי ניסיונות. נסו שוב בעוד ${LOCK_MINUTES} דקות.` }]);
+  if (!(await verifyPassword(current, row.pin_hash))) { await recordFailure(key); throw new HttpError(401, "הסיסמה הנוכחית לא נכונה."); }
+  const problem = passwordProblem(next, row.nickname);
+  if (problem) throw new HttpError(400, `הסיסמה החדשה צריכה: ${problem}`);
+  if (next === current) throw new HttpError(400, "הסיסמה החדשה צריכה להיות שונה מהנוכחית.");
+  const [r] = await db.query<{ session_version: number }>(
+    "UPDATE players SET pin_hash = $2, weak_password = false, session_version = session_version + 1 WHERE id = $1 RETURNING session_version",
+    [playerId, await hashPassword(next)]);
+  return r!.session_version;
+}
+
+export async function playerMode(playerId: string): Promise<ModeId> {
+  const db = await getDb();
+  const [r] = await db.query<{ mode: string }>("SELECT mode FROM players WHERE id = $1", [playerId]);
+  if (!r) throw new HttpError(401, "החשבון לא נמצא. התחברו מחדש.");
+  return isMode(r.mode) ? r.mode : "intermediate";
+}
+
+export async function setMode(playerId: string, mode: ModeId) {
+  const db = await getDb();
+  await db.query("UPDATE players SET mode = $2 WHERE id = $1", [playerId, mode]);
+  return me(playerId);
+}
+
+export async function progressOf(playerId: string, mode: ModeId): Promise<Progress> {
+  const db = await getDb();
+  const rows = await db.query<{ level: number; stars: number; duration_ms: number }>(`SELECT level, stars, duration_ms FROM (${BEST}) b WHERE player_id = $1 AND mode = $2`, [playerId, mode]);
   return Object.fromEntries(rows.map((r) => [r.level, { stars: r.stars, ms: r.duration_ms }]));
 }
 
 export async function me(playerId: string) {
   const db = await getDb();
-  const [p] = await db.query<{ id: string; nickname: string }>("SELECT id, nickname FROM players WHERE id = $1", [playerId]);
+  const [p] = await db.query<{ id: string; nickname: string; mode: string; weak_password: boolean }>("SELECT id, nickname, mode, weak_password FROM players WHERE id = $1", [playerId]);
   if (!p) throw new HttpError(401, "החשבון לא נמצא. התחברו מחדש.");
-  return { id: p.id, nickname: p.nickname, progress: await progressOf(playerId) };
+  const mode = isMode(p.mode) ? p.mode : "intermediate";
+  const sums = await db.query<{ mode: string; done: number; stars: number }>(
+    `SELECT mode, COUNT(*)::int AS done, SUM(stars)::int AS stars FROM (${BEST}) b WHERE player_id = $1 GROUP BY mode`, [playerId]);
+  const modes = Object.fromEntries(MODE_IDS.map((m) => {
+    const s = sums.find((x) => x.mode === m);
+    return [m, { done: s?.done ?? 0, stars: s?.stars ?? 0, total: MODES[m].levels.length }];
+  }));
+  return { id: p.id, nickname: p.nickname, mode, weakPassword: p.weak_password, modes, progress: await progressOf(playerId, mode) };
 }
 
 export async function touch(playerId: string, location: string) {
   const db = await getDb();
   await db.query("UPDATE players SET last_seen = now(), location = $2 WHERE id = $1", [playerId, location.slice(0, 40)]);
+}
+
+async function assertUnlocked(playerId: string, mode: ModeId, n: number) {
+  if (!MODES[mode].levels.includes(n)) throw new HttpError(403, `המשימה הזו לא נמצאת ברמת ${MODES[mode].name}.`);
+  const prev = previousLevel(mode, n);
+  if (prev && !(await progressOf(playerId, mode))[prev]) throw new HttpError(403, "המשימה הזו עדיין נעולה. סיימו קודם את המשימה הקודמת.");
 }
 
 /* ---------------- level runs ---------------- */
@@ -63,13 +156,14 @@ function levelOrThrow(n: number) {
 
 export async function startLevel(playerId: string, n: number, now = new Date()) {
   const level = levelOrThrow(n);
-  if (n > 1 && !(await progressOf(playerId))[n - 1]) throw new HttpError(403, "המשימה הזו עדיין נעולה. סיימו קודם את המשימה הקודמת.");
+  const mode = await playerMode(playerId);
+  await assertUnlocked(playerId, mode, n);
   const key = keyFor(n)!;
-  const deadline = key.kind === "final" ? new Date(now.getTime() + key.seconds * 1000) : null;
+  const deadline = key.kind === "final" ? new Date(now.getTime() + Math.round(key.seconds * MODES[mode].clock) * 1000) : null;
   const db = await getDb();
-  const [row] = await db.query<{ id: string }>("INSERT INTO attempts (player_id, level, started_at, deadline_at) VALUES ($1, $2, $3, $4) RETURNING id", [playerId, n, now, deadline]);
-  await touch(playerId, `שלב ${level.room} משימה ${level.idx}`);
-  return { attemptId: row!.id, deadline: deadline?.toISOString() ?? null, serverNow: now.toISOString() };
+  const [row] = await db.query<{ id: string }>("INSERT INTO attempts (player_id, level, mode, started_at, deadline_at) VALUES ($1, $2, $3, $4, $5) RETURNING id", [playerId, n, mode, now, deadline]);
+  await touch(playerId, `${MODES[mode].icon} שלב ${level.room} משימה ${level.idx}`);
+  return { attemptId: row!.id, mode, deadline: deadline?.toISOString() ?? null, serverNow: now.toISOString() };
 }
 
 async function openAttempt(playerId: string, n: number, attemptId: string) {
@@ -80,6 +174,8 @@ async function openAttempt(playerId: string, n: number, attemptId: string) {
   if (a.failed_at) throw new HttpError(409, "הזמן של הריצה הזו נגמר. פתחו את השלב מחדש.");
   return a;
 }
+
+const modeOf = (a: AttemptRow) => MODES[isMode(a.mode) ? a.mode : "intermediate"];
 
 async function expire(attemptId: string, now: Date) {
   const db = await getDb();
@@ -102,19 +198,19 @@ export async function submitAnswer(playerId: string, n: number, attemptId: strin
 
   if (!verdict.correct) {
     let deadline = a.deadline_at;
-    if (deadline) deadline = new Date(deadline.getTime() - WRONG_PENALTY_S * 1000);
+    if (deadline) deadline = new Date(deadline.getTime() - WRONG_PENALTY_S * modeOf(a).penalty * 1000);
     await db.query("UPDATE attempts SET wrong = wrong + 1, deadline_at = $2 WHERE id = $1", [a.id, deadline]);
     if (deadline && clock > deadline) return expire(a.id, now);
     return { correct: false as const, feedback: verdict.feedback, deadline: deadline?.toISOString() ?? null, serverNow: now.toISOString() };
   }
 
-  const stars = starsFor(final, a.wrong, a.hints);
+  const stars = starsFor(final, a.wrong, final || !modeOf(a).freeHints ? a.hints : 0);
   const durationMs = now.getTime() - a.started_at.getTime();
   await db.query("UPDATE attempts SET completed_at = $2, stars = $3, duration_ms = $4 WHERE id = $1", [a.id, now, stars, durationMs]);
   return {
     correct: true as const, feedback: verdict.feedback, stars, durationMs,
     timeLeftMs: a.deadline_at ? a.deadline_at.getTime() - clock.getTime() : null,
-    wrong: a.wrong, hints: a.hints, progress: await progressOf(playerId),
+    wrong: a.wrong, hints: a.hints, progress: await progressOf(playerId, isMode(a.mode) ? a.mode : "intermediate"),
   };
 }
 
@@ -122,9 +218,10 @@ export async function useHint(playerId: string, n: number, attemptId: string, no
   const a = await openAttempt(playerId, n, attemptId);
   const clock = a.paused_at ?? now;
   if (a.deadline_at && clock > a.deadline_at) return expire(a.id, now);
+  if (!modeOf(a).hints) throw new HttpError(403, "ברמת מומחים אין רמזים. אפשר לשאול את נועה.");
   const text = hintFor(n, a.hints);
   if (!text) throw new HttpError(409, "אין עוד רמזים בשלב הזה");
-  const deadline = a.deadline_at ? new Date(a.deadline_at.getTime() - HINT_PENALTY_S * 1000) : null;
+  const deadline = a.deadline_at ? new Date(a.deadline_at.getTime() - HINT_PENALTY_S * modeOf(a).penalty * 1000) : null;
   const db = await getDb();
   await db.query("UPDATE attempts SET hints = hints + 1, deadline_at = $2 WHERE id = $1", [a.id, deadline]);
   if (deadline && clock > deadline) return expire(a.id, now);
@@ -169,7 +266,7 @@ const SITE_DAILY_QUESTIONS = Number(process.env.TUTOR_DAILY_LIMIT) || 1500;
 
 export async function askTutor(playerId: string, n: number, messages: ChatMsg[], terminal?: string) {
   const level = levelOrThrow(n);
-  if (n > 1 && !(await progressOf(playerId))[n - 1]) throw new HttpError(403, "המשימה הזו עדיין נעולה. סיימו קודם את המשימה הקודמת.");
+  await assertUnlocked(playerId, await playerMode(playerId), n);
   const db = await getDb();
   const [count] = await db.query<{ mine: number; total: number }>(`
     SELECT COUNT(*) FILTER (WHERE player_id = $1)::int AS mine, COUNT(*)::int AS total
@@ -185,28 +282,30 @@ export async function askTutor(playerId: string, n: number, messages: ChatMsg[],
 
 /* ---------------- leaderboard and admin ---------------- */
 
-export async function leaderboard(limitRows = 100) {
+export async function leaderboard(mode: ModeId = "intermediate", limitRows = 100) {
   const db = await getDb();
+  // A player appears on a mode's table once they finished something there, or chose that mode.
   const rows = await db.query<{ id: string; nickname: string; done: number; stars: number; total_ms: number }>(`
-    WITH best AS (${BEST})
+    WITH best AS (SELECT * FROM (${BEST}) x WHERE mode = $2)
     SELECT p.id, p.nickname,
            COUNT(b.level)::int AS done,
            COALESCE(SUM(b.stars), 0)::int AS stars,
            COALESCE(SUM(b.duration_ms), 0)::int AS total_ms
     FROM players p LEFT JOIN best b ON b.player_id = p.id
+    WHERE p.mode = $2 OR b.level IS NOT NULL
     GROUP BY p.id
     ORDER BY done DESC, stars DESC, total_ms ASC, p.created_at ASC
-    LIMIT $1`, [limitRows]);
+    LIMIT $1`, [limitRows, mode]);
   const online = await db.query<{ nickname: string; location: string }>(
     "SELECT nickname, location FROM players WHERE last_seen > now() - interval '60 seconds' ORDER BY last_seen DESC LIMIT 50");
-  return { rows: rows.map((r) => ({ id: r.id, nickname: r.nickname, done: r.done, stars: r.stars, totalMs: r.total_ms })), online, levels: LEVEL_COUNT };
+  return { mode, rows: rows.map((r) => ({ id: r.id, nickname: r.nickname, done: r.done, stars: r.stars, totalMs: r.total_ms })), online, levels: MODES[mode].levels.length };
 }
 
 export async function adminOverview() {
   const db = await getDb();
-  const players = await db.query<{ id: string; nickname: string; created_at: Date; last_seen: Date; location: string }>(
-    "SELECT id, nickname, created_at, last_seen, location FROM players ORDER BY created_at DESC LIMIT 1000");
-  const best = await db.query<{ player_id: string; level: number; stars: number; duration_ms: number }>(BEST);
+  const players = await db.query<{ id: string; nickname: string; created_at: Date; last_seen: Date; location: string; mode: string }>(
+    "SELECT id, nickname, created_at, last_seen, location, mode FROM players ORDER BY created_at DESC LIMIT 1000");
+  const best = await db.query<{ player_id: string; mode: string; level: number; stars: number; duration_ms: number }>(BEST);
   const perLevel = await db.query<{ level: number; players_started: number; players_completed: number; runs: number; avg_ms: number | null; avg_wrong: number; avg_hints: number; expired: number }>(`
     SELECT level,
            COUNT(DISTINCT player_id)::int AS players_started,
@@ -231,7 +330,11 @@ export async function adminOverview() {
     ORDER BY q.created_at DESC LIMIT 40`);
 
   const byPlayer: Record<string, Progress> = {};
-  for (const b of best) (byPlayer[b.player_id] ??= {})[b.level] = { stars: b.stars, ms: b.duration_ms };
+  // The admin grid shows each level's best result in any mode.
+  for (const b of best) {
+    const cur = (byPlayer[b.player_id] ??= {})[b.level];
+    if (!cur || b.stars > cur.stars) byPlayer[b.player_id]![b.level] = { stars: b.stars, ms: b.duration_ms };
+  }
   const onlineCutoff = Date.now() - 60_000;
   return {
     levels: LEVELS.map((l) => {
@@ -247,6 +350,7 @@ export async function adminOverview() {
     players: players.map((p) => ({
       id: p.id, nickname: p.nickname, joinedAt: p.created_at.toISOString(), lastSeen: p.last_seen.toISOString(),
       online: p.last_seen.getTime() > onlineCutoff, location: p.location, progress: byPlayer[p.id] ?? {},
+      mode: isMode(p.mode) ? MODES[p.mode].name : p.mode,
     })),
     questions: recentQuestions.map((q) => ({ nickname: q.nickname, level: q.level, question: q.question, ai: q.source === "ai", at: q.created_at.toISOString() })),
     tutorAi: aiConfigured(),

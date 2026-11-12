@@ -15,6 +15,8 @@ Six stages, each a different topic, from easiest to hardest. Each stage has thre
 
 **Ask Noa.** Every task has a chat with Noa, the tutor. She sees the lesson, the task and the player's last terminal lines, explains commands and errors in plain Hebrew, and never gives away the answer. Commands in her replies run in the terminal with one click. She answers with Claude when `ANTHROPIC_API_KEY` is set, or with Gemini when `GEMINI_API_KEY` is set (Google AI Studio has a free tier); without a key, or when the quota runs out, an offline helper built from the lessons and the dictionary answers instead, so the chat always works. Questions are capped per player and per day, and the admin dashboard shows what players ask.
 
+**Three difficulty modes.** Beginners get every task, twice the time on challenges, half the penalty and hints that cost no stars. Intermediate is the standard game. Experts play only the six challenges, with 60% of the time, double penalties and no hints. Each mode keeps its own progress and leaderboard.
+
 **Review.** Each lesson marks which commands are new and which are worth repeating, each stage opens with a short recap quiz on the previous one, and each stage ends with a list of every command it taught.
 
 Accessibility comes first: every task opens with a one-sentence summary, every command has a tooltip and a live explanation while typing, the dictionary explains commands and terms, stuck players get a tip and then the exact command, and a "large text" switch enlarges the whole interface. Every task ends with stars and a certificate sized for a LinkedIn post or a story; finishing all six earns the cyber fundamentals certificate. A live leaderboard ranks players, and an admin dashboard shows where people get stuck.
@@ -43,6 +45,12 @@ flowchart LR
 | `src/components/*` | Level map, lessons, terminal with command tooltips, dictionary, certificates, admin dashboard |
 
 ## Security decisions
+
+- **Accounts.** Usernames are unique after Unicode normalization (look-alike spellings count as taken) and a few names are reserved. Passwords need 8+ characters with a letter and a digit, are checked against common passwords, and are stored only as salted scrypt hashes. Five wrong passwords lock an account for 15 minutes, counted in the database so the lock holds across server instances. Old 4-digit accounts can still sign in and are asked to choose a real password.
+- **Sessions.** Signed, HttpOnly, SameSite cookies that expire after 60 days and carry a version number: changing the password signs out every other device.
+- **Requests.** Cross-site POSTs are rejected by an Origin check, bodies are capped at 32 KB, and every input is validated with Zod.
+- **Headers.** Strict CSP, HSTS, X-Frame-Options DENY, COOP/CORP same-origin, a tight Permissions-Policy, no `X-Powered-By`, and `noindex` on the admin page and API.
+- **Admin.** The admin password must be at least 10 characters, is compared in constant time, and sign-in locks after 5 failures per network or 30 site-wide.
 
 - **The server owns the truth.** Answers are checked on the server, and the client never receives the key. The incident timer is a deadline stored in the database: wrong answers and hints move it, and a late answer is rejected even if the browser clock is changed.
 - **Ownership checks.** A player can only answer their own attempts, and later levels stay locked server-side until the previous one is complete.

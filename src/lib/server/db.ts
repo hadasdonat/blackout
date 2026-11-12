@@ -58,6 +58,18 @@ CREATE TABLE IF NOT EXISTS questions (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS questions_player_time ON questions (player_id, created_at);
+
+ALTER TABLE players ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'intermediate';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS session_version integer NOT NULL DEFAULT 0;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS weak_password boolean NOT NULL DEFAULT false;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'intermediate';
+CREATE INDEX IF NOT EXISTS attempts_player_mode ON attempts (player_id, mode, level);
+
+CREATE TABLE IF NOT EXISTS auth_failures (
+  key  text NOT NULL,
+  at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS auth_failures_key_at ON auth_failures (key, at);
 `;
 
 /** Vercel's Neon integration may name the variable with a custom prefix. */

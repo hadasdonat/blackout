@@ -15,7 +15,7 @@ const req = (body?: unknown, cookie = "") =>
   new Request("http://test/api", { method: "POST", headers: { "content-type": "application/json", cookie }, body: body === undefined ? undefined : JSON.stringify(body) });
 const lvl = (n: number) => ({ params: Promise.resolve({ n: String(n) }) });
 async function player(nickname = "noa-fan") {
-  const res = await session(req({ mode: "register", nickname, pin: "1234" }));
+  const res = await session(req({ mode: "register", nickname, password: "Secret123", level: "intermediate" }));
   return res.headers.get("set-cookie")!.split(";")[0]!;
 }
 const q = (content: string) => ({ messages: [{ role: "user", content }] });

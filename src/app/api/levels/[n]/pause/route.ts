@@ -6,5 +6,5 @@ import { levelNumber, type LevelParams } from "../params";
 const Schema = z.object({ attemptId: z.uuid(), pause: z.boolean() });
 export const POST = route(async (req: Request, ctx: LevelParams) => {
   const { attemptId, pause } = await body(req, Schema);
-  return json(await setPaused(requirePlayer(req), await levelNumber(ctx), attemptId, pause));
+  return json(await setPaused(await requirePlayer(req), await levelNumber(ctx), attemptId, pause));
 });
