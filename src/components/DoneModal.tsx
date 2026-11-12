@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { drawCertificate } from "@/lib/client/certificate";
 import { mmss } from "@/lib/client/format";
 import { LEVEL_COUNT, STAGE_NAMES, type Level } from "@/lib/game/levels";
+import { stageCommands } from "@/lib/game/review";
 
 export interface DoneInfo { level: Level; stars: number; durationMs: number; timeLeftMs: number | null; wrong: number; hints: number }
 interface Props { info: DoneInfo; nickname: string; hasNext: boolean; onNext: () => void; onMap: () => void; onBoard: () => void }
@@ -25,7 +26,7 @@ export function DoneModal({ info, nickname, hasNext, onNext, onMap, onBoard }: P
 
   const grand = level.n === LEVEL_COUNT;
   const site = typeof location !== "undefined" ? location.origin : "";
-  const shareText = `${grand ? "סיימתי את כל ששת השלבים של Blackout, חדר בריחה בסייבר, וקיבלתי תעודת אנליסט SOC." : final ? `השלמתי את שלב ${level.room} ב-Blackout, חדר בריחה בסייבר: ${STAGE_NAMES[level.room]}, עם ${stars} מתוך 3 כוכבים.` : `השלמתי משימה ב-Blackout, חדר בריחה בסייבר: ${level.title}`}\nמה למדתי: ${level.learned.join(", ")}.\nנסו בעצמכם: ${site}\n#סייבר #Cybersecurity #SOC`;
+  const shareText = `${grand ? "סיימתי את כל ששת השלבים של Blackout, משחק ללימוד סייבר מאפס, וקיבלתי תעודת סיום ביסודות הסייבר." : final ? `השלמתי את שלב ${level.room} ב-Blackout, משחק ללימוד סייבר מאפס: ${STAGE_NAMES[level.room]}, עם ${stars} מתוך 3 כוכבים.` : `השלמתי משימה ב-Blackout, משחק ללימוד סייבר מאפס: ${level.title}`}\nמה למדתי: ${level.learned.join(", ")}.\nנסו בעצמכם: ${site}\n#סייבר #Cybersecurity #LearnCyber #Linux`;
 
   async function save() {
     const c = await drawCertificate(kind, { level, nickname, stars, durationMs: info.durationMs, timeLeftMs: info.timeLeftMs });
@@ -51,7 +52,7 @@ export function DoneModal({ info, nickname, hasNext, onNext, onMap, onBoard }: P
           {[1, 2, 3].map((s) => <span key={s} className={s <= stars ? "on" : ""} style={{ animationDelay: `${s * 180}ms` }}>★</span>)}
         </div>
         <h2 id="doneTitle">{final ? final.winTitle : `משימה ${level.idx} הושלמה!`}</h2>
-        {final && <p className="stagedone">{grand ? "עברתם את כל ששת השלבים. מגיעה לכם תעודת אנליסט SOC!" : `שלב ${level.room}, ${STAGE_NAMES[level.room]}, הושלם. שלב ${level.room + 1} נפתח.`}</p>}
+        {final && <p className="stagedone">{grand ? "עברתם את כל ששת השלבים. מגיעה לכם תעודת סיום ביסודות הסייבר!" : `שלב ${level.room}, ${STAGE_NAMES[level.room]}, הושלם. שלב ${level.room + 1} נפתח.`}</p>}
         {final && <Html html={final.winHtml} />}
         <dl className="stats">
           <div><dt>כוכבים</dt><dd>{stars}/3</dd></div>
@@ -76,6 +77,11 @@ export function DoneModal({ info, nickname, hasNext, onNext, onMap, onBoard }: P
           </div>
         </section>
         <div><h3>מה למדתם במשימה הזו</h3><ul className="plain">{level.learned.map((x) => <li key={x}>{x}</li>)}</ul></div>
+        {final && (
+          <div><h3>חזרה: הפקודות של שלב {level.room}</h3>
+            <ul className="plain cmdlist">{stageCommands(level.room).map((e) => <li key={e.key}><code dir="ltr">{e.show}</code> {e.desc}</li>)}</ul>
+          </div>
+        )}
         {final && <Html html={final.debriefHtml} />}
         <div className="actions">
           {hasNext && <button className="primary" type="button" onClick={onNext} autoFocus>{final ? `לשלב ${level.room + 1}` : "למשימה הבאה"}</button>}

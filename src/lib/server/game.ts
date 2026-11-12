@@ -5,6 +5,7 @@ import { checkFinal, checkPractice, HINT_PENALTY_S, hintFor, keyFor, SECRET_BONU
 import { hashPin, verifyPin } from "./auth";
 import { getDb } from "./db";
 import { HttpError } from "./http";
+import { offlineAnswer, tutorReply, type ChatMsg } from "./tutor";
 
 export interface Progress { [level: number]: { stars: number; ms: number } }
 interface AttemptRow {
@@ -147,7 +148,7 @@ export async function claimSecret(playerId: string, n: number, attemptId: string
  */
 export async function setPaused(playerId: string, n: number, attemptId: string, pause: boolean, now = new Date()) {
   const a = await openAttempt(playerId, n, attemptId);
-  if (!a.deadline_at) throw new HttpError(400, "רק משימות אירוע עם שעון אפשר לעצור");
+  if (!a.deadline_at) throw new HttpError(400, "רק אתגרים עם שעון אפשר לעצור");
   const db = await getDb();
   if (pause) {
     if (a.paused_at) return { paused: true, timeLeftMs: a.deadline_at.getTime() - a.paused_at.getTime() };
@@ -159,6 +160,27 @@ export async function setPaused(playerId: string, n: number, attemptId: string, 
   const deadline = new Date(a.deadline_at.getTime() + (now.getTime() - a.paused_at.getTime()));
   await db.query("UPDATE attempts SET paused_at = NULL, deadline_at = $2 WHERE id = $1", [a.id, deadline]);
   return { paused: false, deadline: deadline.toISOString(), serverNow: now.toISOString() };
+}
+
+/* ---------------- tutor ---------------- */
+
+const PLAYER_DAILY_QUESTIONS = 60;
+const SITE_DAILY_QUESTIONS = Number(process.env.TUTOR_DAILY_LIMIT) || 1500;
+
+export async function askTutor(playerId: string, n: number, messages: ChatMsg[], terminal?: string) {
+  const level = levelOrThrow(n);
+  if (n > 1 && !(await progressOf(playerId))[n - 1]) throw new HttpError(403, "המשימה הזו עדיין נעולה. סיימו קודם את המשימה הקודמת.");
+  const db = await getDb();
+  const [count] = await db.query<{ mine: number; total: number }>(`
+    SELECT COUNT(*) FILTER (WHERE player_id = $1)::int AS mine, COUNT(*)::int AS total
+    FROM questions WHERE created_at > now() - interval '1 day'`, [playerId]);
+  if ((count?.mine ?? 0) >= PLAYER_DAILY_QUESTIONS) throw new HttpError(429, "שאלתם הרבה שאלות היום. נועה תחזור לענות מחר, ובינתיים יש רמזים ומילון.");
+  // Past the site-wide budget Noa still answers, but offline, so the API bill stays capped.
+  const reply = (count?.total ?? 0) >= SITE_DAILY_QUESTIONS
+    ? { answer: offlineAnswer(level, messages.at(-1)!.content), source: "offline" as const }
+    : await tutorReply(level, messages, terminal);
+  await db.query("INSERT INTO questions (player_id, level, question, source) VALUES ($1, $2, $3, $4)", [playerId, n, messages.at(-1)!.content.slice(0, 800), reply.source]);
+  return reply;
 }
 
 /* ---------------- leaderboard and admin ---------------- */
@@ -202,6 +224,12 @@ export async function adminOverview() {
       FROM answers WHERE NOT correct GROUP BY level, answer
     ) t WHERE rn <= 3 ORDER BY level, c DESC`);
 
+  const questionsPerLevel = await db.query<{ level: number; c: number }>("SELECT level, COUNT(*)::int AS c FROM questions GROUP BY level");
+  const recentQuestions = await db.query<{ nickname: string; level: number; question: string; source: string; created_at: Date }>(`
+    SELECT p.nickname, q.level, q.question, q.source, q.created_at
+    FROM questions q JOIN players p ON p.id = q.player_id
+    ORDER BY q.created_at DESC LIMIT 40`);
+
   const byPlayer: Record<string, Progress> = {};
   for (const b of best) (byPlayer[b.player_id] ??= {})[b.level] = { stars: b.stars, ms: b.duration_ms };
   const onlineCutoff = Date.now() - 60_000;
@@ -213,11 +241,14 @@ export async function adminOverview() {
         started: s?.players_started ?? 0, completed: s?.players_completed ?? 0, runs: s?.runs ?? 0,
         avgMs: s?.avg_ms ?? null, avgWrong: s?.avg_wrong ?? 0, avgHints: s?.avg_hints ?? 0, expired: s?.expired ?? 0,
         topWrong: topWrong.filter((w) => w.level === l.n).map((w) => ({ answer: w.answer, count: w.c })),
+        questions: questionsPerLevel.find((x) => x.level === l.n)?.c ?? 0,
       };
     }),
     players: players.map((p) => ({
       id: p.id, nickname: p.nickname, joinedAt: p.created_at.toISOString(), lastSeen: p.last_seen.toISOString(),
       online: p.last_seen.getTime() > onlineCutoff, location: p.location, progress: byPlayer[p.id] ?? {},
     })),
+    questions: recentQuestions.map((q) => ({ nickname: q.nickname, level: q.level, question: q.question, ai: q.source === "ai", at: q.created_at.toISOString() })),
+    tutorAi: !!process.env.ANTHROPIC_API_KEY,
   };
 }

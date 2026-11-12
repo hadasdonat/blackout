@@ -131,7 +131,7 @@ export function Game() {
   function goMap() { setPaused(null); setRun(null); setDone(null); setLost(false); refreshBoard(); scrollTo(0, 0); }
   async function logout() { await api("/api/logout", {}).catch(() => {}); setMe(null); setRun(null); }
 
-  if (loading) return <div className="wrap"><p className="label">טוען את המשמרת...</p></div>;
+  if (loading) return <div className="wrap"><p className="label">טוען...</p></div>;
   const t = me ? totals(me.progress) : null;
 
   return (
@@ -139,7 +139,7 @@ export function Game() {
       <header className="top">
         <div className="brand">
           <h1>BLACKOUT</h1>
-          <p>{level ? `שלב ${level.room} · ${level.title}` : "חדר בריחה בסייבר"}</p>
+          <p>{level ? `שלב ${level.room} · ${level.title}` : "לומדים סייבר מאפס"}</p>
         </div>
         <div className="bar-tools">
           {timeLeft !== null && !run?.solved && (
@@ -162,7 +162,7 @@ export function Game() {
       {me && !run && (
         <main className="mapgrid">
           <section className="mapcol" aria-label="מפת השלבים">
-            <h2>מפת המשמרת</h2>
+            <h2>מפת הלמידה</h2>
             <p className="label">לחצו על השלב המהבהב כדי להתחיל</p>
             <LevelMap progress={me.progress} onOpen={(n) => void openLevel(n)} />
           </section>

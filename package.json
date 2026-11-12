@@ -2,7 +2,7 @@
   "name": "blackout",
   "version": "1.0.0",
   "private": true,
-  "description": "A cyber escape room: learn to investigate logs and phishing, then solve a live incident against the clock.",
+  "description": "Learn cyber security and terminal commands from zero, with practice, review and an AI tutor.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

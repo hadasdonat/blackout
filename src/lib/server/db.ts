@@ -48,6 +48,16 @@ CREATE TABLE IF NOT EXISTS answers (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS answers_wrong_by_level ON answers (level) WHERE NOT correct;
+
+CREATE TABLE IF NOT EXISTS questions (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  player_id   uuid NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  level       smallint NOT NULL,
+  question    text NOT NULL,
+  source      text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS questions_player_time ON questions (player_id, created_at);
 `;
 
 /** Vercel's Neon integration may name the variable with a custom prefix. */
@@ -70,6 +80,7 @@ async function connect(): Promise<Db> {
   if (process.env.VERCEL) throw new HttpError(503, "מסד הנתונים עוד לא מחובר לאתר. מנהלת האתר צריכה לחבר אותו ב-Vercel.");
   const { PGlite } = await import("@electric-sql/pglite");
   const dir = process.env.PGLITE_DIR ?? (process.env.NODE_ENV === "test" ? undefined : "./.data/pglite");
+  if (dir) (await import("node:fs")).mkdirSync(dir, { recursive: true });
   const lite = new PGlite(dir);
   const db: Db = {
     async query<T>(sql: string, params: unknown[] = []) { return (await lite.query<T>(sql, params)).rows; },

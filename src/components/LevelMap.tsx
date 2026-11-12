@@ -51,7 +51,7 @@ export function LevelMap({ progress, onOpen }: { progress: Progress; onOpen: (n:
       })}
       <div className={`trophy${allDone ? " won" : ""}`} style={at(180, trophyY)}>
         <span className="disc" aria-hidden="true">🏆</span>
-        <span className="name">{allDone ? "אנליסט SOC: כל ששת השלבים!" : "סיימו את כל ששת השלבים"}</span>
+        <span className="name">{allDone ? "יסודות הסייבר: כל ששת השלבים!" : "סיימו את כל ששת השלבים"}</span>
       </div>
     </div>
   );

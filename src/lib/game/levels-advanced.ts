@@ -9,7 +9,7 @@ export const STAGE3: Raw[] = [
     tldr: "לפני שמחליטים אם כתובת מסוכנת, בודקים מה אחרים כבר דיווחו עליה.",
     noa: "בשלבים הקודמים פתרנו הכול מתוך הלוגים שלנו. עכשיו נלמד לבדוק אם כתובת כבר מוכרת כמסוכנת, במקום לנחש.",
     lesson:
-      "<p><b>מודיעין איומים</b> (Threat Intelligence) הוא מידע שארגונים ואנליסטים משתפים על תוקפים: אילו כתובות, דומיינים וקבצים כבר נקשרו למתקפות.</p>" +
+      "<p><b>מודיעין איומים</b> (Threat Intelligence) הוא מידע שארגונים וחוקרים משתפים על תוקפים: אילו כתובות, דומיינים וקבצים כבר נקשרו למתקפות.</p>" +
       "<p>אחד הכלים הנפוצים הוא בדיקת <b>מוניטין של IP</b>, כמו באתר AbuseIPDB. מקבלים:</p><ul><li><b>ציון סיכון</b> מ-0 עד 100. מעל 75 זה בדרך כלל זדוני.</li><li><b>ספק ומדינה</b>: מי מחזיק בכתובת.</li><li><b>דיווחים</b>: כמה פעמים אנשים דיווחו עליה, ועל מה.</li></ul>" +
       "<p>כך זה נראה בטרמינל:</p>" + pre("iprep 192.0.2.10\n  risk score : 0 / 100\n  provider   : Microsoft Azure\n  verdict    : CLEAN"),
     task: "בדקו את הכתובת שתקפה את השרת בשלב 1, <code>198.51.100.23</code>. מה ציון הסיכון שלה?",
@@ -42,16 +42,16 @@ export const STAGE3: Raw[] = [
     chips: [["urlscan noctume-portal.example", "סורקת את אתר הפישינג"], ["urlscan portal.nocturne.example", "סורקת את האתר האמיתי, לשם השוואה"]],
   },
   {
-    short: "האירוע", title: "מי מדבר עם התוקף?",
+    short: "אתגר", title: "אתגר: מי מדבר עם התוקף?",
     tldr: "מוציאים רשימה של כל הכתובות שהמחשבים פנו אליהן, ובודקים כל אחת עם iprep.",
-    noa: "חומת האש רשמה עשרות חיבורים יוצאים אתמול. אחד מהם הולך לשרת של התוקף. מצאו אותו.",
-    lesson: "<p>בלי חפיפה הפעם. טיפ לדרך: כך מוציאים רשימה של כל כתובת יעד, כל אחת פעם אחת:</p>" + pre("cat firewall.log | awk '{print $4}' | sort -u"),
+    noa: "אתגר הסיום של שלב המודיעין: חזרה על awk, sort ו-iprep. חומת האש רשמה עשרות חיבורים יוצאים, ואחד מהם הולך לשרת של התוקף.",
+    lesson: "<p>אתגר הסיום: בלי חומר חדש. טיפ לדרך: כך מוציאים רשימה של כל כתובת יעד, כל אחת פעם אחת:</p>" + pre("cat firewall.log | awk '{print $4}' | sort -u"),
     learned: ["חקירה עם מודיעין איומים", "מציאת מחשב שמתקשר עם תוקף", "ציון בינוני הוא סיבה לבדוק, לא לחסום"],
     chips: [["cat firewall.log | awk '{print $4}' | sort -u", "כל כתובות היעד, כל אחת פעם אחת"], ["iprep 192.0.2.55", "בודקת מוניטין של כתובת"], ["grep W11-TAL firewall.log", "כל החיבורים של מחשב אחד"]],
     final: {
-      caseHtml: '<div class="tag"><span>INC-0419</span><b>SEV-2</b></div><p>אחד המחשבים בחברה מתקשר עם שרת של התוקף. מצאו איזה מחשב ולאיזו כתובת, כדי שנבודד אותו.</p>',
+      caseHtml: '<div class="tag"><span>אתגר שלב 3</span><b>על זמן</b></div><p>אחד המחשבים בחברה מתקשר עם שרת של התוקף. מצאו איזה מחשב ולאיזו כתובת, כדי שנבודד אותו.</p>',
       fields: [{ label: "המחשב שמתקשר עם התוקף", placeholder: "W11-XXX" }, { label: "הכתובת הזדונית", placeholder: "0.0.0.0" }],
-      alerts: ["[11:30:02] ALERT  outbound traffic to a newly reported address", "[11:30:05] SOC    case-0419 opened and assigned to analyst"],
+      alerts: ["[11:30:02] ALERT  outbound traffic to a newly reported address", "[11:30:05] CHALLENGE  stage 3 final: you have everything you need"],
       go: "השעון רץ. מצאו את המחשב ואת הכתובת הזדונית.",
       clockLabel: "ISOLATE IN",
       winTitle: "המחשב בודד!",
@@ -103,16 +103,16 @@ export const STAGE4: Raw[] = [
     chips: [["sandbox invoice_2026.pdf.exe", "דוח ההתנהגות של הקובץ החשוד"], ["sandbox Zoom_Installer.exe", "דוח של תוכנה תקינה, לשם השוואה"]],
   },
   {
-    short: "האירוע", title: "איך זה התחיל ואיך זה נשאר?",
+    short: "אתגר", title: "אתגר: איך זה התחיל ואיך זה נשאר?",
     tldr: "process.log מראה מי הפעיל את מי. עוקבים אחרי השרשרת מהקובץ הזדוני.",
-    noa: "כדי לנקות את המחשב צריך לדעת שני דברים: מאיפה הנוזקה הגיעה, ואיך היא דואגת לחזור.",
-    lesson: "<p>בלי חפיפה. ב-<code>process.log</code> כל שורה אומרת איזו תוכנה (<code>parent</code>) הפעילה איזו תוכנה (<code>child</code>). עקבו אחרי השרשרת של הקובץ הזדוני, אחורה וקדימה.</p>",
+    noa: "אתגר הסיום של שלב הקובץ החשוד: חזרה על grep ועל מה שלמדנו על Persistence. צריך לגלות מאיפה הנוזקה הגיעה ואיך היא דואגת לחזור.",
+    lesson: "<p>אתגר הסיום: בלי חומר חדש. ב-<code>process.log</code> כל שורה אומרת איזו תוכנה (<code>parent</code>) הפעילה איזו תוכנה (<code>child</code>). עקבו אחרי השרשרת של הקובץ הזדוני, אחורה וקדימה.</p>",
     learned: ["שרשרת תהליכים: מי הפעיל את מי", "זיהוי Persistence במשימה מתוזמנת", "מאיפה נוזקה נכנסת למחשב"],
     chips: [["cat process.log", "מי הפעיל את מי במחשב של רונן"], ["grep invoice process.log", "רק השורות של הקובץ החשוד"], ["grep schtasks process.log", "יצירה של משימות מתוזמנות"]],
     final: {
-      caseHtml: '<div class="tag"><span>INC-0420</span><b>SEV-1</b></div><p>צוות ה-IT מוכן לנקות את המחשב של רונן. הם צריכים לדעת איזו תוכנה פתחה את הקובץ הזדוני, ואיזו משימה מתוזמנת הוא יצר כדי לחזור.</p>',
+      caseHtml: '<div class="tag"><span>אתגר שלב 4</span><b>על זמן</b></div><p>צוות ה-IT מוכן לנקות את המחשב של רונן. הם צריכים לדעת איזו תוכנה פתחה את הקובץ הזדוני, ואיזו משימה מתוזמנת הוא יצר כדי לחזור.</p>',
       fields: [{ label: "התוכנה שפתחה את הקובץ הזדוני", placeholder: "program.exe" }, { label: "שם המשימה המתוזמנת שהנוזקה יצרה", placeholder: "TaskName" }],
-      alerts: ["[08:40:11] ALERT  sync.exe started again after reboot on W11-RONEN", "[08:40:15] SOC    case-0420 opened and assigned to analyst"],
+      alerts: ["[08:40:11] ALERT  sync.exe started again after reboot on W11-RONEN", "[08:40:15] CHALLENGE  stage 4 final: you have everything you need"],
       go: "השעון רץ. מצאו מאיפה הנוזקה הגיעה ואיך היא נשארת.",
       clockLabel: "REINFECT IN",
       winTitle: "המחשב נוקה!",
@@ -168,16 +168,16 @@ export const STAGE5: Raw[] = [
     chips: [["grep 198.51.100.77 access.log | awk '{print $11}'", "ה-User-Agent של כל בקשה מהכתובת"], ["grep 198.51.100.77 access.log | awk '{print $9}'", "קודי התשובה שהכתובת קיבלה"]],
   },
   {
-    short: "האירוע", title: "מה נגנב מהאתר?",
+    short: "אתגר", title: "אתגר: מה נגנב מהאתר?",
     tldr: "מחפשים בקשה עם קוד 200 ותשובה גדולה בהרבה מהרגיל, ומתרגמים אותה עם urldecode.",
-    noa: "הסורק קיבל רק שגיאות, אבל מישהו אחר קיבל תשובה גדולה מדי. יש לנו דליפה. צריך לדעת מה דלף ולאן.",
-    lesson: "<p>בלי חפיפה. רמז לדרך: כך רואים גודל, קוד וכתובת של כל בקשה, מהגדולה לקטנה:</p>" + pre("awk '{print $10, $9, $1}' access.log | sort -nr | head"),
+    noa: "אתגר הסיום של שלב האתרים: חזרה על awk, sort ו-urldecode. מישהו קיבל מהאתר תשובה גדולה מדי, וצריך לגלות מה דלף ולאן.",
+    lesson: "<p>אתגר הסיום: בלי חומר חדש. רמז לדרך: כך רואים גודל, קוד וכתובת של כל בקשה, מהגדולה לקטנה:</p>" + pre("awk '{print $10, $9, $1}' access.log | sort -nr | head"),
     learned: ["זיהוי SQL Injection שהצליח", "מציאת מה דלף ממסד הנתונים", "איך מתגוננים: שאילתות עם פרמטרים"],
     chips: [["awk '{print $10, $9, $1}' access.log | sort -nr | head", "הבקשות עם התשובות הגדולות ביותר"], ["urldecode access.log | grep FROM", "כל הבקשות שמזכירות טבלה"]],
     final: {
-      caseHtml: '<div class="tag"><span>INC-0421</span><b>SEV-1</b></div><p>האתר של החברה החזיר בלילה נתונים שלא היה אמור להחזיר. מצאו מאיזו טבלה במסד הנתונים נגנב המידע, ואיזו כתובת IP הוציאה אותו.</p>',
+      caseHtml: '<div class="tag"><span>אתגר שלב 5</span><b>על זמן</b></div><p>האתר של החברה החזיר בלילה נתונים שלא היה אמור להחזיר. מצאו מאיזו טבלה במסד הנתונים נגנב המידע, ואיזו כתובת IP הוציאה אותו.</p>',
       fields: [{ label: "הטבלה שממנה נגנב מידע", placeholder: "table_name" }, { label: "הכתובת שהוציאה את המידע", placeholder: "0.0.0.0" }],
-      alerts: ["[03:45:20] ALERT  unusually large responses from /product", "[03:45:22] SOC    case-0421 opened and assigned to analyst"],
+      alerts: ["[03:45:20] ALERT  unusually large responses from /product", "[03:45:22] CHALLENGE  stage 5 final: you have everything you need"],
       go: "השעון רץ. מה דלף, ולאיזו כתובת?",
       clockLabel: "LEAK IN",
       winTitle: "הדליפה נעצרה!",
@@ -234,18 +234,18 @@ export const STAGE6: Raw[] = [
   {
     short: "הגמר", title: "עצרו את ההצפנה",
     tldr: "משלבים הכול: מי כותב לשרת הקבצים כמויות חריגות, ולאן המחשב הזה פונה כל 60 שניות.",
-    noa: "זה הרגע. קבצים מוצפנים עכשיו בשרת הקבצים. מצאו מי מצפין ואת שרת השליטה החדש, ואני מנתקת אותם.",
-    lesson: "<p>זה הגמר, ובלי חפיפה. השתמשו בכל מה שלמדתם בשישה השלבים: לוגים, חיפוש, מודיעין וניתוח רשת.</p>",
+    noa: "הגמר! כאן נפגשות כל הפקודות שלמדתם. בסיפור, כופרה מצפינה את שרת הקבצים: מצאו מי מצפין ואת שרת השליטה החדש.",
+    lesson: "<p>זה הגמר: אין חומר חדש, רק חזרה על כל מה שלמדתם בשישה השלבים: לוגים, חיפוש, מודיעין וניתוח רשת.</p>",
     learned: ["חקירת כופרה מקצה לקצה", "שילוב לוגי DNS, רשת ומודיעין", "איך מתגוננים: גיבויים מנותקים ותגובה מהירה"],
     chips: [["cat alerts.txt", "ההתראות מהלילה"], ["grep FS-01 netflow.log", "כל החיבורים לשרת הקבצים"], ["tail -n 20 dns.log", "20 השאלות האחרונות ב-DNS"]],
     final: {
-      caseHtml: '<div class="tag"><span>INC-0422</span><b>SEV-1</b></div><p>כופרה בשם Nightjar מצפינה את שרת הקבצים FS-01. אתמול חסמנו את השרת הקודם של התוקף, אבל הוא עבר לשרת גיבוי. מצאו איזה מחשב מצפין את הקבצים ולאיזה שרת שליטה הוא מחובר.</p>',
+      caseHtml: '<div class="tag"><span>אתגר שלב 6</span><b>על זמן</b></div><p>כופרה בשם Nightjar מצפינה את שרת הקבצים FS-01. אתמול חסמנו את השרת הקודם של התוקף, אבל הוא עבר לשרת גיבוי. מצאו איזה מחשב מצפין את הקבצים ולאיזה שרת שליטה הוא מחובר.</p>',
       fields: [{ label: "המחשב שמצפין את הקבצים", placeholder: "W11-XXX" }, { label: "שרת השליטה החדש", placeholder: "0.0.0.0" }],
-      alerts: ["[23:41:02] EDR  FS-01: 4,812 files renamed to *.nightjar", "[23:41:05] EDR  ransom note created in 312 folders", "[23:41:30] SOC  case-0422 opened and assigned to analyst"],
+      alerts: ["[23:41:02] EDR  FS-01: 4,812 files renamed to *.nightjar", "[23:41:05] EDR  ransom note created in 312 folders", "[23:41:30] CHALLENGE  stage 6 final: you have everything you need"],
       go: "השעון רץ. כל דקה מצפינה עוד אלפי קבצים.",
       clockLabel: "ENCRYPT",
       winTitle: "ההצפנה נעצרה!",
-      winHtml: "<p>המחשב <code>W11-DANA</code> נותק מהרשת, והשרת <code>198.51.100.150</code> נחסם. רוב הקבצים שוחזרו מהגיבוי הלילי. עברתם את כל שישת השלבים: אתם חושבים כמו אנליסטים.</p>",
+      winHtml: "<p>המחשב <code>W11-DANA</code> נותק מהרשת, והשרת <code>198.51.100.150</code> נחסם. רוב הקבצים שוחזרו מהגיבוי הלילי. עברתם את כל ששת השלבים: עכשיו אתם מכירים את יסודות הסייבר ואת הפקודות הכי שימושיות בטרמינל.</p>",
       debriefHtml:
         '<div><h3>מה קרה</h3><div class="tl"><time>22:15</time><span>W11-DANA התחיל לפנות ל-cdn-sync.example, דומיין גיבוי שנרשם באותו יום כמו update-check.example.</span>' +
         "<time>כל 60 שנ׳</time><span>פנייה ל-198.51.100.150: beaconing לשרת השליטה החדש.</span>" +

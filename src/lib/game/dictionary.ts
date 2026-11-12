@@ -1,7 +1,7 @@
 export interface Entry { key: string; show: string; desc: string; ex?: string; room?: number }
 
 export const COMMANDS: Entry[] = [
-  { key: "ls", show: "ls", desc: "מציגה את רשימת הקבצים בתיק.", ex: "ls" },
+  { key: "ls", show: "ls", desc: "מציגה את רשימת הקבצים בתיקייה.", ex: "ls" },
   { key: "ls -a", show: "ls -a", desc: "מציגה גם קבצים נסתרים, שהשם שלהם מתחיל בנקודה.", ex: "ls -a" },
   { key: "cat", show: "cat <קובץ>", desc: "מציגה קובץ שלם.", ex: "cat README.txt" },
   { key: "head", show: "head <קובץ>", desc: "מציגה את 10 השורות הראשונות. עם -n 3 רק 3 שורות.", ex: "head -n 3 README.txt" },
@@ -27,8 +27,8 @@ export const COMMANDS: Entry[] = [
   { key: "man", show: "man <פקודה>", desc: "מציגה בטרמינל את ההסבר על פקודה מהמילון.", ex: "man grep" },
   { key: "history", show: "history", desc: "מציגה את הפקודות שהקלדתם. החצים למעלה ולמטה מחזירים אותן.", ex: "history" },
   { key: "clear", show: "clear", desc: "מנקה את המסך.", ex: "clear" },
-  { key: "hint", show: "hint", desc: "נותנת רמז לשלב. מורידה כוכב, ובשלב האירוע גם 2 דקות.", ex: "hint" },
-  { key: "submit", show: "submit <א> <ב>", desc: "שולחת את הממצאים בשלב האירוע. אפשר גם בטופס שבצד." },
+  { key: "hint", show: "hint", desc: "נותנת רמז לשלב. מורידה כוכב, ובאתגר הסיום גם 2 דקות.", ex: "hint" },
+  { key: "submit", show: "submit <א> <ב>", desc: "שולחת את שתי התשובות באתגר הסיום. אפשר גם בטופס שבצד." },
   { key: "help", show: "help", desc: "רשימה קצרה של כל הפקודות.", ex: "help" },
 ];
 

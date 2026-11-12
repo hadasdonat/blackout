@@ -78,7 +78,7 @@ function buildRoom1() {
       "r.katz      on call        198.51.100.140",
       "m.shani     leave to 09/11 -",
     ],
-    ".shift_note": ["נועה, משמרת ערב: מי שמוצא את הפתק הזה יודע להסתכל היטב. במשימת האירוע הוא שווה דקה נוספת על השעון."],
+    ".shift_note": ["פתק מנועה: מי שמוצא את הפתק הזה יודע להסתכל היטב. באתגר הסיום הוא שווה דקה נוספת על השעון."],
   };
   const bins = new Array<number>(16).fill(0);
   for (const t of fails) { const b = Math.floor(t / 900); if (b >= 0 && b < 16) bins[b]!++; }

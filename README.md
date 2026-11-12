@@ -1,8 +1,8 @@
-# Blackout · a cyber escape room
+# Blackout · learn cyber security from zero
 
-Players learn to investigate like a SOC analyst, one small step at a time, and then solve a live incident against the clock. No prior knowledge needed.
+A Hebrew game that teaches cyber security and terminal commands to complete beginners: short lessons, hands-on practice in a simulated terminal, regular review, and an AI tutor who answers any question. No prior knowledge needed.
 
-Six stages, each a different topic, from easiest to hardest. Each stage has three guided tasks (a plain-language lesson, then a practice exercise) and a final incident solved alone against the clock:
+Six stages, each a different topic, from easiest to hardest. Each stage has three guided tasks (a plain-language lesson, then a practice exercise) and a final challenge that combines the stage's commands against the clock:
 
 | Stage | Topic | What players learn |
 |---|---|---|
@@ -13,7 +13,11 @@ Six stages, each a different topic, from easiest to hardest. Each stage has thre
 | 5 | Web attacks | Web server logs, status codes, SQL injection, URL encoding (`urldecode`), spotting a successful dump |
 | 6 | Ransomware | DNS logs, beaconing, data exfiltration in netflow, stopping encryption on a file server |
 
-Accessibility comes first: every task opens with a one-sentence summary, every command has a tooltip and a live explanation while typing, the dictionary explains commands and terms, stuck players get a tip and then the exact command, and a "large text" switch enlarges the whole interface. Every task ends with stars and a certificate sized for a LinkedIn post or a story; finishing all six earns the SOC analyst certificate. A live leaderboard ranks players, and an admin dashboard shows where people get stuck.
+**Ask Noa.** Every task has a chat with Noa, the tutor. She sees the lesson, the task and the player's last terminal lines, explains commands and errors in plain Hebrew, and never gives away the answer. Commands in her replies run in the terminal with one click. With `ANTHROPIC_API_KEY` set she answers with Claude; without it, an offline helper built from the lessons and the dictionary answers instead, so the chat always works. Questions are capped per player and per day, and the admin dashboard shows what players ask.
+
+**Review.** Each lesson marks which commands are new and which are worth repeating, each stage opens with a short recap quiz on the previous one, and each stage ends with a list of every command it taught.
+
+Accessibility comes first: every task opens with a one-sentence summary, every command has a tooltip and a live explanation while typing, the dictionary explains commands and terms, stuck players get a tip and then the exact command, and a "large text" switch enlarges the whole interface. Every task ends with stars and a certificate sized for a LinkedIn post or a story; finishing all six earns the cyber fundamentals certificate. A live leaderboard ranks players, and an admin dashboard shows where people get stuck.
 
 ## Architecture
 
@@ -22,6 +26,7 @@ flowchart LR
   B[Browser<br/>React UI + terminal engine] -- JSON over HTTPS --> A[Next.js route handlers]
   A --> K[Answer key<br/>server-only]
   A --> D[(PostgreSQL)]
+  A --> T[Noa the tutor<br/>Claude API or offline]
   B -. runs locally .-> S[Shell: grep, awk, sort, pipes, globs]
 ```
 
@@ -32,6 +37,8 @@ flowchart LR
 | `src/lib/game/evidence.ts` | Case files generated deterministically, so browser and server see the same evidence |
 | `src/lib/server/answers.ts` | The answer key, hints and decoy feedback. Marked `server-only`, so it can never ship to the browser |
 | `src/lib/server/game.ts` | Game rules and SQL: unlocking, attempts, scoring, the incident clock, leaderboard, analytics |
+| `src/lib/server/tutor.ts` | Noa: the prompt (built only from what the player can already see), the Claude call, and the offline fallback |
+| `src/lib/game/review.ts` | Which commands each task introduces, what to repeat, and the recap quizzes |
 | `src/app/api/*` | Thin route handlers: validation with Zod, auth, rate limits |
 | `src/components/*` | Level map, lessons, terminal with command tooltips, dictionary, certificates, admin dashboard |
 
@@ -76,7 +83,7 @@ Tests prove every practice task is solvable from its own evidence and every inci
 
 1. Import the repository into [Vercel](https://vercel.com).
 2. In the project, open **Storage** and connect a free Neon Postgres database. Vercel sets `DATABASE_URL` for you.
-3. Optionally set `ADMIN_PASSWORD` (for `/admin`) and `SESSION_SECRET` (`openssl rand -hex 32`). Without `SESSION_SECRET`, sessions are signed with a key derived from `DATABASE_URL`.
+3. Optionally set `ADMIN_PASSWORD` (for `/admin`), `ANTHROPIC_API_KEY` (Noa answers with AI; `TUTOR_MODEL` and `TUTOR_DAILY_LIMIT` tune the model and the site-wide daily cap) and `SESSION_SECRET` (`openssl rand -hex 32`). Without `SESSION_SECRET`, sessions are signed with a key derived from `DATABASE_URL`.
 4. Redeploy. Tables are created on the first request.
 
 The rate limiter is in memory, which suits a single instance. For several instances, move it to Redis.

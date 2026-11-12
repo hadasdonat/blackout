@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Blackout · חדר בריחה בסייבר",
-  description: "לומדים לחקור לוגים ומיילים מתחזים, ואז עוצרים מתקפה אמיתית נגד השעון. בלי ידע קודם.",
-  openGraph: { title: "Blackout · חדר בריחה בסייבר", description: "תצליחו לעצור את התוקף לפני שהשעון נגמר?", type: "website" },
+  title: "Blackout · לומדים סייבר מאפס",
+  description: "שישה שלבים, פקודות טרמינל, תרגול וחזרה, ומורה AI שעונה על כל שאלה. בלי ידע קודם.",
+  openGraph: { title: "Blackout · לומדים סייבר מאפס", description: "לומדים סייבר ופקודות טרמינל מאפס, עם מורה AI ואתגר בסוף כל שלב.", type: "website" },
 };
 export const viewport: Viewport = { themeColor: "#121a33", colorScheme: "dark" };
 

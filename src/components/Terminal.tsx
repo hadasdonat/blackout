@@ -6,7 +6,7 @@ import type { Files } from "@/lib/game/evidence";
 import { completeWord, runLine, type Action, type Line, type LineKind } from "@/lib/game/shell";
 import { sfx } from "@/lib/client/fx";
 
-export interface TerminalHandle { print(text: string, kind?: LineKind): void; run(cmd: string): void; focus(): void; clear(): void }
+export interface TerminalHandle { print(text: string, kind?: LineKind): void; run(cmd: string): void; focus(): void; clear(): void; recent(): string }
 interface Props {
   files: Files;
   secretFile: string;
@@ -34,6 +34,8 @@ export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal({ fi
   const pos = useRef(0);
   const out = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const latest = useRef<Line[]>([]);
+  latest.current = lines;
 
   const append = (more: Line[]) => {
     setLines((l) => [...l, ...more.map((x) => ({ ...x, id: nextId++ }))].slice(-1200));
@@ -56,6 +58,8 @@ export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal({ fi
     run: exec,
     focus: () => input.current?.focus({ preventScroll: true }),
     clear: () => setLines([]),
+    /** The last lines on screen, so Noa can see what the player tried. */
+    recent: () => latest.current.slice(-18).map((l) => (l.kind === "cmd" ? l.text : `  ${l.text}`)).join("\n").slice(-2400),
   }));
 
   const showTip = (el: HTMLElement, text: string) => {
@@ -65,14 +69,14 @@ export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal({ fi
 
   return (
     <section className={`term${alert ? " alert" : ""}`} aria-label="טרמינל" dir="ltr">
-      <div className="tbar"><span>analyst@soc-04</span><span>{status}</span></div>
+      <div className="tbar"><span>student@blackout</span><span>{status}</span></div>
       <div className="out" ref={out} role="log" aria-live="polite" onClick={() => { if (!String(getSelection())) input.current?.focus({ preventScroll: true }); }}>
         {lines.map((l) => (
           <p key={l.id} dir="auto" className={`ln ${l.kind === "out" ? "o" : l.kind}${/[֐-׿]/.test(l.text) ? " he" : ""}`}>{l.kind === "out" ? colour(l.text) : l.text}</p>
         ))}
       </div>
       <div className="entry">
-        <label htmlFor="cmd">~/case$</label>
+        <label htmlFor="cmd">~/lab$</label>
         <input
           id="cmd" ref={input} value={value} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} enterKeyHint="send" aria-describedby="cmdHelp"
           onChange={(e) => setValue(e.target.value)}

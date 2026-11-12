@@ -41,7 +41,7 @@ export async function drawCertificate(kind: "post" | "story", c: CertInfo): Prom
     x.direction = dir; x.fillStyle = color; x.font = font.replace("{s}", String(Math.round(size * sc))); x.textAlign = "center"; x.fillText(t, cx, y);
   };
   x.save(); x.shadowColor = "#39e5ff"; x.shadowBlur = 24; text("BLACKOUT", 112, "#ffffff", '{s}px "Saira Stencil One", Impact, sans-serif', "ltr"); x.restore();
-  y += 64 * sc; text(grand ? "תעודת אנליסט SOC" : l.final ? `תעודת סיום · שלב ${l.room} מתוך 6` : "תעודת השלמת משימה", 40, "#8a93c0", '600 {s}px "Assistant", Arial, sans-serif');
+  y += 64 * sc; text(grand ? "תעודת סיום · יסודות הסייבר" : l.final ? `תעודת סיום · שלב ${l.room} מתוך 6` : "תעודת השלמת משימה", 40, "#8a93c0", '600 {s}px "Assistant", Arial, sans-serif');
   y += (story ? 210 : 150) * sc; text(c.nickname, 120, "#ffffff", '700 {s}px "Karantina", Impact, sans-serif');
   y += 74 * sc; text(grand ? "השלים/ה את כל ששת השלבים" : l.final ? `השלים/ה את שלב ${l.room}: ${STAGE_NAMES[l.room]}` : `שלב ${l.room} · משימה ${l.idx}: ${l.title}`, 54, "#39e5ff", '700 {s}px "Karantina", Impact, sans-serif');
   y += (story ? 160 : 110) * sc;
@@ -65,6 +65,6 @@ export async function drawCertificate(kind: "post" | "story", c: CertInfo): Prom
 
   y = H - m - (story ? 150 : 100);
   text(`${c.timeLeftMs !== null ? `זמן שנותר ${mmss(c.timeLeftMs)}` : `זמן ${mmss(c.durationMs)}`}   ·   ${new Date().toLocaleDateString("he-IL")}`, 30, "#8a93c0", '600 {s}px "Assistant", Arial, sans-serif');
-  y += 48 * sc; text("Blackout · חדר בריחה בסייבר", 36, "#ff3d9a", '700 {s}px "Karantina", Impact, sans-serif');
+  y += 48 * sc; text("Blackout · לומדים סייבר מאפס", 36, "#ff3d9a", '700 {s}px "Karantina", Impact, sans-serif');
   return cv;
 }

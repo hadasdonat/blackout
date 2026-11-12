@@ -8,8 +8,10 @@ import { reducedMotion, sfx } from "@/lib/client/fx";
 import { Dictionary } from "./Dictionary";
 import { FailChart } from "./FailChart";
 import { Terminal, type TerminalHandle } from "./Terminal";
+import { Tutor } from "./Tutor";
+import { newCommands, reviewCommands, stageQuiz } from "@/lib/game/review";
 
-const BASE_CHIPS: [string, string][] = [["ls", "מציגה את הקבצים בתיק"], ["cat README.txt", "מציגה את קובץ ההסבר על התיק"], ["help", "רשימה קצרה של כל הפקודות"], ["clear", "מנקה את המסך"]];
+const BASE_CHIPS: [string, string][] = [["ls", "מציגה את הקבצים בתיקייה"], ["cat README.txt", "מציגה את קובץ ההסבר"], ["help", "רשימה קצרה של כל הפקודות"], ["clear", "מנקה את המסך"]];
 
 export interface LevelApi {
   answer(a: string | [string, string]): Promise<{ correct: boolean; feedback: string } | null>;
@@ -33,7 +35,7 @@ function Typewriter({ text }: { text: string }) {
 
 export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
   const term = useRef<TerminalHandle>(null);
-  const [tab, setTab] = useState<"stage" | "dict">("stage");
+  const [tab, setTab] = useState<"stage" | "ask" | "dict">("stage");
   const [answer, setAnswer] = useState("");
   const [f, setF] = useState<[string, string]>(["", ""]);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
@@ -48,8 +50,8 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
       final.alerts.forEach((a) => t.print(a, a.includes("ALERT") ? "err" : "sys"));
       t.print(final.go, "out");
     } else {
-      t.print(`[SOC] חפיפה עם נועה · ${levelLabel(level)}`, "sys");
-      t.print("ההוראות בתיק שבצד. הקלידו פקודה ולחצו Enter, או לחצו על פקודה מוצעת. עמדו על פקודה כדי לראות מה היא עושה.", "out");
+      t.print(`[שיעור] ${levelLabel(level)}`, "sys");
+      t.print("ההסבר בצד. הקלידו פקודה ולחצו Enter, או לחצו על פקודה מוצעת. עמדו על פקודה כדי לראות מה היא עושה. שאלה? הלשונית \"שאלו את נועה\".", "out");
     }
     if (matchMedia("(min-width: 901px)").matches) t.focus();
   }, [level, final]);
@@ -75,12 +77,12 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
   function onAction(a: Action) {
     if (a.type === "hint") void hint();
     else if (a.type === "submit") {
-      if (!final) term.current?.print("בשלבי החפיפה עונים בתרגיל שבצד.", "err");
+      if (!final) term.current?.print("במשימות התרגול עונים בתרגיל שבצד.", "err");
       else if (a.args.length !== 2) term.current?.print("usage: submit A B", "err");
       else void send([a.args[0]!, a.args[1]!]);
     } else if (a.type === "secret") {
       void api.secret(a.file).then((bonus) => {
-        term.current?.print(bonus ? "מצאתם קובץ נסתר: נוספה דקה לשעון" : "מצאתם קובץ נסתר! בשלב האירוע הוא שווה דקה נוספת.", "sys");
+        term.current?.print(bonus ? "מצאתם קובץ נסתר: נוספה דקה לשעון" : "מצאתם קובץ נסתר! באתגר הסיום הוא שווה דקה נוספת.", "sys");
         sfx("ok");
       });
     }
@@ -90,18 +92,21 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
 
   return (
     <main className="gamegrid">
-      <aside className="file" aria-label="תיק האירוע">
+      <aside className="file" aria-label="חומר הלימוד">
         <div className="tabs" role="tablist">
           <button role="tab" type="button" aria-selected={tab === "stage"} onClick={() => setTab("stage")}>השלב</button>
+          <button role="tab" type="button" aria-selected={tab === "ask"} onClick={() => setTab("ask")}>שאלו את נועה</button>
           <button role="tab" type="button" aria-selected={tab === "dict"} onClick={() => setTab("dict")}>מילון</button>
         </div>
         <div className="pane" hidden={tab !== "stage"}>
           <div className="noa"><div className="avatar" aria-hidden="true">נ</div><div className="bubble"><Typewriter key={level.n} text={level.noa} /></div></div>
+          {level.idx === 1 && level.room > 1 && <Recap room={level.room} />}
           <div className="lesson">
             <span className="label">{levelLabel(level)}</span>
             <h2>{level.title}</h2>
             <p className="tldr"><b>בקצרה:</b> {level.tldr}</p>
             <Html html={level.lesson} className="lesson" />
+            <CommandTags level={level} />
           </div>
           {!final && (
             <div className={`task${shake ? " shake" : ""}`} key={`t${shake}`}>
@@ -118,7 +123,7 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
                   {hints.length === 0 ? "צריכים עזרה? קבלו רמז" : "עדיין תקועים? הראו לי את הפקודה"}
                 </button>
               )}
-              <p className="label">רמז מוריד כוכב אחד, אבל אין הגבלה על ניסיונות.</p>
+              <p className="label">רמז מוריד כוכב אחד, אבל אין הגבלה על ניסיונות. שאלות לנועה לא עולות כלום: <button className="linkish" type="button" onClick={() => setTab("ask")}>שאלו אותה</button></p>
             </div>
           )}
           {final && (
@@ -128,7 +133,7 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
                 {final.chart && <><span className="label">התחברויות שנכשלו בכל 15 דקות, מ-22:00 עד 02:00</span><FailChart /></>}
               </section>
               <form className={`task${shake ? " shake" : ""}`} key={`r${shake}`} onSubmit={(e) => { e.preventDefault(); if (f[0].trim() && f[1].trim()) void send(f); }} noValidate>
-                <b>דוח ממצאים</b>
+                <b>התשובות שלכם</b>
                 {final.fields.map((field, i) => (
                   <div className="field" key={field.label}>
                     <label htmlFor={`f${i}`}>{field.label}</label>
@@ -136,7 +141,7 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
                       onChange={(e) => setF((v) => (i === 0 ? [e.target.value, v[1]] : [v[0], e.target.value]))} />
                   </div>
                 ))}
-                <button className="primary" type="submit" disabled={busy || solved}>שליחת הממצאים</button>
+                <button className="primary" type="submit" disabled={busy || solved}>בדיקת התשובות</button>
                 <p className={`feedback ${feedback?.ok ? "ok" : "no"}`} role="status">{feedback?.text}</p>
               </form>
               <section className="lesson">
@@ -149,12 +154,54 @@ export function LevelScreen({ level, api, hints, hintsLeft, solved }: Props) {
             </>
           )}
         </div>
+        <div className="pane" hidden={tab !== "ask"}>
+          <Tutor level={level} terminal={() => term.current?.recent() ?? ""} onTry={(cmd) => term.current?.run(cmd)} onAuth={() => location.reload()} />
+        </div>
         <div className="pane" hidden={tab !== "dict"}>
           <Dictionary room={level.room} onTry={(cmd) => term.current?.run(cmd)} />
         </div>
       </aside>
       <Terminal ref={term} files={ROOM_FILES[level.room]!} secretFile={SECRET_FILES[level.room]!} chips={chips} alert={!!final}
-        status={final ? `INC-04${16 + level.room} · LIVE` : "training · no clock"} onAction={onAction} />
+        status={final ? `challenge ${level.room} · clock on` : "practice · no clock"} onAction={onAction} />
     </main>
+  );
+}
+
+function CommandTags({ level }: { level: Level }) {
+  const fresh = newCommands(level);
+  const old = reviewCommands(level);
+  if (!fresh.length && !old.length) return null;
+  return (
+    <div className="cmdtags">
+      {fresh.length > 0 && <div><span className="label">פקודות חדשות כאן</span>{fresh.map((e) => <code key={e.key} className="tag new" dir="ltr" title={e.desc}>{e.show}</code>)}</div>}
+      {old.length > 0 && <div><span className="label">חזרה: כבר מכירים</span>{old.map((e) => <code key={e.key} className="tag" dir="ltr" title={e.desc}>{e.show}</code>)}</div>}
+    </div>
+  );
+}
+
+/** A short, unscored recap of the previous stage's commands before a new topic starts. */
+function Recap({ room }: { room: number }) {
+  const qs = stageQuiz(room);
+  const [picked, setPicked] = useState<Record<number, string>>({});
+  if (!qs.length) return null;
+  const right = qs.filter((q, i) => picked[i] === q.answer).length;
+  const done = Object.keys(picked).length === qs.length;
+  return (
+    <details className="recap" open>
+      <summary>חזרה מהירה על השלב הקודם</summary>
+      <p className="label">לא חובה, ולא משפיע על הכוכבים.</p>
+      {qs.map((q, i) => (
+        <div className="rq" key={q.prompt}>
+          <p><span className="label">{i + 1}. איזו פקודה עושה את זה?</span><br />{q.prompt}</p>
+          <div className="opts">
+            {q.options.map((o) => {
+              const state = picked[i] === undefined ? "" : o === q.answer ? " right" : picked[i] === o ? " wrong" : "";
+              return <button key={o} type="button" dir="ltr" className={`opt${state}`} disabled={picked[i] !== undefined} onClick={() => setPicked((p) => ({ ...p, [i]: o }))}>{o}</button>;
+            })}
+          </div>
+        </div>
+      ))}
+      {done && <p className="feedback ok">{right === qs.length ? "מושלם! אתם זוכרים הכול." : `${right} מתוך ${qs.length}. לא נורא, הפקודות יחזרו גם בשלב הזה, ותמיד אפשר להציץ במילון.`}</p>}
+    </details>
   );
 }

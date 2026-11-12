@@ -5,8 +5,13 @@ import { api, ApiError, type Progress } from "@/lib/client/api";
 import { ago, mmss, totals } from "@/lib/client/format";
 import { LEVEL_COUNT, LEVELS } from "@/lib/game/levels";
 
-interface LevelStat { n: number; room: number; idx: number; title: string; started: number; completed: number; runs: number; avgMs: number | null; avgWrong: number; avgHints: number; expired: number; topWrong: { answer: string; count: number }[] }
-interface Overview { levels: LevelStat[]; players: { id: string; nickname: string; joinedAt: string; lastSeen: string; online: boolean; location: string; progress: Progress }[] }
+interface LevelStat { n: number; room: number; idx: number; title: string; started: number; completed: number; runs: number; avgMs: number | null; avgWrong: number; avgHints: number; expired: number; topWrong: { answer: string; count: number }[]; questions: number }
+interface Overview {
+  levels: LevelStat[];
+  players: { id: string; nickname: string; joinedAt: string; lastSeen: string; online: boolean; location: string; progress: Progress }[];
+  questions: { nickname: string; level: number; question: string; ai: boolean; at: string }[];
+  tutorAi: boolean;
+}
 
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 
@@ -78,7 +83,7 @@ export function AdminDashboard() {
         <p className="label">כל פס מראה כמה שחקנים הגיעו לשלב ביחס לשלב הראשון, והחלק המלא הוא מי שסיים אותו.</p>
         <div className="tablewrap">
           <table className="board stuck">
-            <thead><tr><th>שלב</th><th className="barcol">הגיעו וסיימו</th><th>סיימו</th><th>זמן ממוצע</th><th>טעויות</th><th>רמזים</th><th>נגמר הזמן</th><th>התשובות השגויות הנפוצות</th></tr></thead>
+            <thead><tr><th>שלב</th><th className="barcol">הגיעו וסיימו</th><th>סיימו</th><th>זמן ממוצע</th><th>טעויות</th><th>רמזים</th><th>שאלות לנועה</th><th>נגמר הזמן</th><th>התשובות השגויות הנפוצות</th></tr></thead>
             <tbody>
               {data.levels.map((l) => (
                 <tr key={l.n} className={hardest?.n === l.n ? "hard" : ""}>
@@ -88,6 +93,7 @@ export function AdminDashboard() {
                   <td className="num">{l.avgMs ? mmss(l.avgMs) : "–"}</td>
                   <td className="num">{l.avgWrong.toFixed(1)}</td>
                   <td className="num">{l.avgHints.toFixed(1)}</td>
+                  <td className="num">{l.questions || "–"}</td>
                   <td className="num">{l.expired || "–"}</td>
                   <td className="wrongs">{l.topWrong.length ? l.topWrong.map((w) => <span key={w.answer} className="chip-a" dir="auto">{w.answer} <b>×{w.count}</b></span>) : <span className="label">–</span>}</td>
                 </tr>
@@ -95,6 +101,18 @@ export function AdminDashboard() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="card">
+        <h3>מה שואלים את נועה</h3>
+        <p className="label">{data.tutorAi ? "נועה עונה עם AI." : "נועה עונה כרגע במצב בסיסי, בלי AI. כדי להפעיל AI, הוסיפו ב-Vercel משתנה בשם ANTHROPIC_API_KEY."}</p>
+        <ul className="qlist">
+          {data.questions.map((q, i) => {
+            const l = LEVELS[q.level - 1];
+            return <li key={`${q.at}${i}`}><span className="label">{q.nickname} · שלב {l?.room}.{l?.idx} · {ago(q.at)}{q.ai ? "" : " · בסיסי"}</span><p dir="auto">{q.question}</p></li>;
+          })}
+          {!data.questions.length && <li className="label">עוד אין שאלות.</li>}
+        </ul>
       </section>
 
       <section className="card">

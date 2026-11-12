@@ -21,12 +21,13 @@ export function Intro({ onReady }: { onReady: (me: Me) => void }) {
   return (
     <main className="intro">
       <h2 className="title">BLACKOUT</h2>
-      <p className="lead">חדר בריחה בסייבר. לא צריך ידע קודם: כל מה שצריך מוסבר בדרך.</p>
-      <p>אתם אנליסטים חדשים בחדר הבקרה של נוקטורן דאטה, חברה בדיונית. מחכים לכם שישה שלבים, כל אחד בנושא אחר ומהקל לקשה: לוגים, פישינג, מודיעין איומים, קובץ חשוד, התקפות על אתרים וכופרה.</p><p>כל שלב בנוי מארבע משימות. בשלוש הראשונות נועה, ראש המשמרת, מסבירה ומתרגלת איתכם. ברביעית מגיעה התראה אמיתית, ותצטרכו לפתור אותה לבד נגד השעון.</p>
+      <p className="lead">לומדים סייבר מאפס, בטרמינל, בקצב שלכם. לא צריך שום ידע קודם.</p>
+      <p>שישה שלבים, כל אחד בנושא אחר ומהקל לקשה: לוגים, פישינג, מודיעין איומים, קובץ חשוד, התקפות על אתרים וכופרה. בכל שלב לומדים כמה פקודות חדשות, מתרגלים אותן, וחוזרים על מה שכבר למדתם.</p>
+      <p>נועה, המורה שלכם, מסבירה כל מילה וכל פקודה. נתקעתם? שואלים אותה בצ'אט, כמה שרוצים.</p>
       <ol className="learn">
-        <li><b>לומדים</b>הסבר קצר ופשוט על כל נושא, מהבסיס.</li>
-        <li><b>מתרגלים</b>תרגיל בטרמינל אחרי כל הסבר, עם רמזים כשנתקעים.</li>
-        <li><b>מתחרים</b>כוכבים, תעודה על כל משימה וטבלת מובילים. רק מי שעובר את כל השישה מקבל את תעודת האנליסט.</li>
+        <li><b>לומדים</b>הסבר קצר ופשוט לכל נושא ולכל פקודה, מהבסיס.</li>
+        <li><b>מתרגלים וחוזרים</b>תרגיל בטרמינל אחרי כל הסבר, חזרה מהירה בתחילת כל שלב, ונועה עונה על כל שאלה.</li>
+        <li><b>אתגר</b>בסוף כל שלב, אתגר שמשלב את כל הפקודות שלמדתם. מקבלים כוכבים ותעודה לשיתוף בלינקדאין.</li>
       </ol>
       <form className="card join" onSubmit={submit} noValidate>
         <div className="seg" role="tablist" aria-label="סוג כניסה">
@@ -42,9 +43,9 @@ export function Intro({ onReady }: { onReady: (me: Me) => void }) {
             <label htmlFor="pin">{mode === "register" ? "בחרו קוד של 4 ספרות" : "הקוד שלכם"}</label>
             <input id="pin" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} placeholder="••••" />
           </div>
-          <button className="primary" type="submit" disabled={busy}>{busy ? "רגע..." : mode === "register" ? "יוצאים למשמרת" : "ממשיכים מאיפה שעצרתי"}</button>
+          <button className="primary" type="submit" disabled={busy}>{busy ? "רגע..." : mode === "register" ? "מתחילים ללמוד" : "ממשיכים מאיפה שעצרתי"}</button>
         </div>
-        <p className="label">הקוד מאפשר לחזור להתקדמות שלכם ממכשיר אחר. אנחנו שומרים רק את השם, הקוד המוצפן והתוצאות.</p>
+        <p className="label">הקוד מאפשר לחזור להתקדמות שלכם ממכשיר אחר. אנחנו שומרים רק את השם, הקוד המוצפן, התוצאות והשאלות לנועה (כדי לשפר את השלבים).</p>
         {error && <p className="feedback no" role="alert">{error}</p>}
       </form>
     </main>

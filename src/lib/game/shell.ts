@@ -241,7 +241,7 @@ export function runLine(raw: string, ctx: ShellContext): Result {
       if (name === "clear") return { lines: [], actions: [{ type: "clear" }] };
       if (name === "hint") { actions.push({ type: "hint" }); data = null; continue; }
       if (name === "submit") { actions.push({ type: "submit", args: rawArgs }); data = null; continue; }
-      if (name === "exit") throw new ShellError("אי אפשר לעזוב את המשמרת באמצע אירוע.");
+      if (name === "exit") throw new ShellError("אי אפשר לצאת מהטרמינל באמצע משימה. כדי לעזוב, לחצו \"חזרה למפה\".");
       const cmd = cmds[name];
       if (!cmd) throw new ShellError(`${name}: command not found. Run help, or open the dictionary tab.`);
       const args = name === "awk" ? rawArgs : expandGlobs(rawArgs, ctx.files);
