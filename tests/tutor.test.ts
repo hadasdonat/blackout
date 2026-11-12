@@ -20,8 +20,8 @@ async function player(nickname = "noa-fan") {
 }
 const q = (content: string) => ({ messages: [{ role: "user", content }] });
 
-beforeEach(() => { resetDbForTests(); resetLimitsForTests(); delete process.env.ANTHROPIC_API_KEY; });
-afterEach(() => { vi.unstubAllGlobals(); delete process.env.ANTHROPIC_API_KEY; });
+beforeEach(() => { resetDbForTests(); resetLimitsForTests(); delete process.env.ANTHROPIC_API_KEY; delete process.env.GEMINI_API_KEY; });
+afterEach(() => { vi.unstubAllGlobals(); delete process.env.ANTHROPIC_API_KEY; delete process.env.GEMINI_API_KEY; });
 
 describe("Noa the tutor", () => {
   it("answers offline without an API key, explaining the command asked about", async () => {
@@ -63,6 +63,24 @@ describe("Noa the tutor", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("overloaded", { status: 529 })));
     const fallback = await (await ask(req(q("מה זה לוג?"), c), lvl(1))).json();
     expect(fallback.source).toBe("offline");
+  });
+
+  it("uses Gemini when only a Gemini key is set, and falls back when the quota runs out", async () => {
+    process.env.GEMINI_API_KEY = "test-gemini";
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "נסו `ls`" }] } }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const c = await player();
+    const ok = await (await ask(req(q("מאיפה מתחילים?"), c), lvl(1))).json();
+    expect(ok).toEqual({ answer: "נסו `ls`", source: "ai" });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string; headers: Record<string, string> }];
+    expect(url).toContain("generativelanguage.googleapis.com");
+    expect(init.headers["x-goog-api-key"]).toBe("test-gemini");
+    const sent = JSON.parse(init.body);
+    expect(sent.system_instruction.parts[0].text).toContain(LEVELS[0]!.title);
+    expect(sent.contents.at(-1).role).toBe("user");
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("quota", { status: 429 })));
+    expect((await (await ask(req(q("מה זה לוג?"), c), lvl(1))).json()).source).toBe("offline");
   });
 
   it("never puts a challenge answer into the prompt", () => {

@@ -4,9 +4,10 @@ import { ROOM_FILES } from "@/lib/game/evidence";
 import { levelLabel, STAGE_NAMES, type Level } from "@/lib/game/levels";
 
 /**
- * Noa, the in-game tutor. With ANTHROPIC_API_KEY set she answers with Claude;
- * without it (or when the API fails) she falls back to an offline helper built
- * from the lesson and the command dictionary, so the chat always works.
+ * Noa, the in-game tutor. She answers with Claude when ANTHROPIC_API_KEY is set,
+ * otherwise with Gemini when GEMINI_API_KEY is set (Google has a free tier).
+ * Without a key, or when the API fails or hits its quota, she falls back to an
+ * offline helper built from the lesson and the dictionary, so the chat always works.
  *
  * The answer key never reaches this file: the model only sees what the player
  * can already see (the lesson, the task, the commands, their own terminal).
@@ -91,6 +92,33 @@ async function askClaude(level: Level, messages: ChatMsg[], terminal?: string): 
   }
 }
 
+async function askGemini(level: Level, messages: ChatMsg[], terminal?: string): Promise<string | null> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "x-goog-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt(level) }] },
+        contents: cleanHistory(messages, terminal).map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+        generationConfig: { maxOutputTokens: 700, temperature: 0.4 },
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (!res.ok) { console.error("tutor: Gemini returned", res.status, (await res.text()).slice(0, 300)); return null; }
+    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    const text = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+    return text || null;
+  } catch (e) {
+    console.error("tutor: Gemini call failed", e);
+    return null;
+  }
+}
+
+export const aiConfigured = () => !!(process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY);
+
 /* ---------------- offline helper ---------------- */
 
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -130,7 +158,7 @@ export function offlineAnswer(level: Level, question: string): string {
 }
 
 export async function tutorReply(level: Level, messages: ChatMsg[], terminal?: string): Promise<TutorReply> {
-  const ai = await askClaude(level, messages, terminal);
+  const ai = (await askClaude(level, messages, terminal)) ?? (await askGemini(level, messages, terminal));
   if (ai) return { answer: ai, source: "ai" };
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   return { answer: offlineAnswer(level, lastUser), source: "offline" };

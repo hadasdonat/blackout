@@ -105,7 +105,7 @@ export function AdminDashboard() {
 
       <section className="card">
         <h3>מה שואלים את נועה</h3>
-        <p className="label">{data.tutorAi ? "נועה עונה עם AI." : "נועה עונה כרגע במצב בסיסי, בלי AI. כדי להפעיל AI, הוסיפו ב-Vercel משתנה בשם ANTHROPIC_API_KEY."}</p>
+        <p className="label">{data.tutorAi ? "נועה עונה עם AI." : "נועה עונה כרגע במצב בסיסי, בלי AI. כדי להפעיל AI, הוסיפו ב-Vercel משתנה בשם GEMINI_API_KEY (חינמי) או ANTHROPIC_API_KEY."}</p>
         <ul className="qlist">
           {data.questions.map((q, i) => {
             const l = LEVELS[q.level - 1];

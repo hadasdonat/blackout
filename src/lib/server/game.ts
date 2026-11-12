@@ -5,7 +5,7 @@ import { checkFinal, checkPractice, HINT_PENALTY_S, hintFor, keyFor, SECRET_BONU
 import { hashPin, verifyPin } from "./auth";
 import { getDb } from "./db";
 import { HttpError } from "./http";
-import { offlineAnswer, tutorReply, type ChatMsg } from "./tutor";
+import { aiConfigured, offlineAnswer, tutorReply, type ChatMsg } from "./tutor";
 
 export interface Progress { [level: number]: { stars: number; ms: number } }
 interface AttemptRow {
@@ -249,6 +249,6 @@ export async function adminOverview() {
       online: p.last_seen.getTime() > onlineCutoff, location: p.location, progress: byPlayer[p.id] ?? {},
     })),
     questions: recentQuestions.map((q) => ({ nickname: q.nickname, level: q.level, question: q.question, ai: q.source === "ai", at: q.created_at.toISOString() })),
-    tutorAi: !!process.env.ANTHROPIC_API_KEY,
+    tutorAi: aiConfigured(),
   };
 }

@@ -13,7 +13,7 @@ Six stages, each a different topic, from easiest to hardest. Each stage has thre
 | 5 | Web attacks | Web server logs, status codes, SQL injection, URL encoding (`urldecode`), spotting a successful dump |
 | 6 | Ransomware | DNS logs, beaconing, data exfiltration in netflow, stopping encryption on a file server |
 
-**Ask Noa.** Every task has a chat with Noa, the tutor. She sees the lesson, the task and the player's last terminal lines, explains commands and errors in plain Hebrew, and never gives away the answer. Commands in her replies run in the terminal with one click. With `ANTHROPIC_API_KEY` set she answers with Claude; without it, an offline helper built from the lessons and the dictionary answers instead, so the chat always works. Questions are capped per player and per day, and the admin dashboard shows what players ask.
+**Ask Noa.** Every task has a chat with Noa, the tutor. She sees the lesson, the task and the player's last terminal lines, explains commands and errors in plain Hebrew, and never gives away the answer. Commands in her replies run in the terminal with one click. She answers with Claude when `ANTHROPIC_API_KEY` is set, or with Gemini when `GEMINI_API_KEY` is set (Google AI Studio has a free tier); without a key, or when the quota runs out, an offline helper built from the lessons and the dictionary answers instead, so the chat always works. Questions are capped per player and per day, and the admin dashboard shows what players ask.
 
 **Review.** Each lesson marks which commands are new and which are worth repeating, each stage opens with a short recap quiz on the previous one, and each stage ends with a list of every command it taught.
 
@@ -83,7 +83,7 @@ Tests prove every practice task is solvable from its own evidence and every inci
 
 1. Import the repository into [Vercel](https://vercel.com).
 2. In the project, open **Storage** and connect a free Neon Postgres database. Vercel sets `DATABASE_URL` for you.
-3. Optionally set `ADMIN_PASSWORD` (for `/admin`), `ANTHROPIC_API_KEY` (Noa answers with AI; `TUTOR_MODEL` and `TUTOR_DAILY_LIMIT` tune the model and the site-wide daily cap) and `SESSION_SECRET` (`openssl rand -hex 32`). Without `SESSION_SECRET`, sessions are signed with a key derived from `DATABASE_URL`.
+3. Optionally set `ADMIN_PASSWORD` (for `/admin`), `GEMINI_API_KEY` (free tier) or `ANTHROPIC_API_KEY` so Noa answers with AI (`GEMINI_MODEL`, `TUTOR_MODEL` and `TUTOR_DAILY_LIMIT` tune the model and the site-wide daily cap) and `SESSION_SECRET` (`openssl rand -hex 32`). Without `SESSION_SECRET`, sessions are signed with a key derived from `DATABASE_URL`.
 4. Redeploy. Tables are created on the first request.
 
 The rate limiter is in memory, which suits a single instance. For several instances, move it to Redis.
