@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS attempts (
   duration_ms  integer
 );
 CREATE INDEX IF NOT EXISTS attempts_player_level ON attempts (player_id, level);
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS paused_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS answers (
   id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

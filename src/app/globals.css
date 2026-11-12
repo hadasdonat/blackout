@@ -274,6 +274,10 @@ tr.hard td { background: #ff6b7d12; }
 .trophy.won { color: var(--amber); }
 .trophy.won .disc { filter: none; opacity: 1; border: 3px solid var(--amber); box-shadow: 0 0 30px #f7ac2e88; }
 html.big body { zoom: 1.15; }
+.clockbtn { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; background: none; border: 1px solid var(--red); color: var(--red); font-size: 13px; line-height: 1; }
+.clockbtn:hover { background: #ff6b7d26; }
+.clock.paused { animation: none; }
+.clock.paused output { opacity: .45; }
 .node .name, .node .stars, .trophy .name { position: relative; z-index: 1; padding: 0 6px; background: var(--ink); }
 .pane .lesson p, .pane .lesson li { line-height: 1.7; }
 @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

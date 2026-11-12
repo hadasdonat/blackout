@@ -10,6 +10,7 @@ import { GET as board } from "@/app/api/leaderboard/route";
 import { POST as adminLogin } from "@/app/api/admin/login/route";
 import { GET as overview } from "@/app/api/admin/overview/route";
 import { FACTS } from "@/lib/game/evidence";
+import { setPaused, startLevel, submitAnswer } from "@/lib/server/game";
 
 process.env.ADMIN_PASSWORD = "correct horse";
 
@@ -139,5 +140,23 @@ describe("practice help", () => {
     expect((await (await ask()).json()).hint).toContain("<code>head auth.log</code>");
     expect((await ask()).status).toBe(409);
     expect(await send(c, 1, run.attemptId, "vpn-gw01")).toMatchObject({ correct: true, stars: 1 });
+  });
+});
+
+describe("pause", () => {
+  it("stops the server clock: time does not run out while stopped", async () => {
+    const c = await player();
+    for (const n of [1, 2, 3]) { const { body: r } = await begin(c, n); await send(c, n, r.attemptId, PRACTICE[n]); }
+    const id = c.split("=")[1]!.split(".")[0]!;
+    const t0 = new Date("2026-11-12T10:00:00Z");
+    const run = await startLevel(id, 4, t0);
+    const p = await setPaused(id, 4, run.attemptId, true, new Date(t0.getTime() + 60_000));
+    expect(p).toMatchObject({ paused: true, timeLeftMs: 29 * 60_000 });
+    const wrongWhilePaused = await submitAnswer(id, 4, run.attemptId, ["r.katz", "198.51.100.140"], new Date(t0.getTime() + 40 * 60_000));
+    expect(wrongWhilePaused).toMatchObject({ correct: false });
+    const r = await setPaused(id, 4, run.attemptId, false, new Date(t0.getTime() + 11 * 60_000));
+    expect(Date.parse((r as { deadline: string }).deadline) - Date.parse(run.deadline!)).toBe(10 * 60_000 - 60_000);
+    const done = await submitAnswer(id, 4, run.attemptId, FINAL[4]!, new Date(t0.getTime() + 12 * 60_000));
+    expect(done).toMatchObject({ correct: true, timeLeftMs: 27 * 60_000 });
   });
 });

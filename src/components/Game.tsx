@@ -27,6 +27,7 @@ export function Game() {
   const [showBoard, setShowBoard] = useState(false);
   const [sound, setSoundState] = useState(false);
   const [big, setBig] = useState(false);
+  const [paused, setPaused] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
   const fx = useRef<HTMLCanvasElement>(null);
@@ -52,14 +53,24 @@ export function Game() {
 
   // The server owns the incident clock; the browser only displays it.
   useEffect(() => {
-    if (!run?.deadline || run.solved || lost) return;
+    if (!run?.deadline || run.solved || lost || paused !== null) return;
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
-  }, [run?.deadline, run?.solved, lost]);
-  const timeLeft = run?.deadline ? run.deadline - (now + run.offset) : null;
+  }, [run?.deadline, run?.solved, lost, paused]);
+  const timeLeft = paused !== null ? paused : run?.deadline ? run.deadline - (now + run.offset) : null;
   useEffect(() => {
-    if (timeLeft !== null && timeLeft <= 0 && run && !run.solved && !lost) { setLost(true); sfx("lose"); }
-  }, [timeLeft, run, lost]);
+    if (paused === null && timeLeft !== null && timeLeft <= 0 && run && !run.solved && !lost) { setLost(true); sfx("lose"); }
+  }, [timeLeft, run, lost, paused]);
+
+  async function togglePause(pause: boolean) {
+    if (!run) return;
+    try {
+      const res = await api<{ paused: boolean; timeLeftMs?: number; deadline?: string; serverNow?: string } | { expired: true }>(`/api/levels/${run.n}/pause`, { attemptId: run.attemptId, pause });
+      if ("expired" in res) { setPaused(null); setLost(true); return; }
+      if (res.paused) setPaused(res.timeLeftMs ?? 0);
+      else { setPaused(null); syncClock(res.deadline ?? null, res.serverNow); setNow(Date.now()); }
+    } catch (e) { fail(e); }
+  }
 
   const fail = (e: unknown) => {
     if (e instanceof ApiError && e.status === 401) { setMe(null); setRun(null); return; }
@@ -67,7 +78,7 @@ export function Game() {
   };
 
   async function openLevel(n: number) {
-    setError(""); setDone(null); setLost(false);
+    setError(""); setDone(null); setLost(false); setPaused(null);
     try {
       const r = await api<{ attemptId: string; deadline: string | null; serverNow: string }>(`/api/levels/${n}/start`, {});
       setRun({ n, attemptId: r.attemptId, deadline: r.deadline ? Date.parse(r.deadline) : null, offset: Date.parse(r.serverNow) - Date.now(), hints: [], solved: false });
@@ -117,7 +128,7 @@ export function Game() {
     },
   };
 
-  function goMap() { setRun(null); setDone(null); setLost(false); refreshBoard(); scrollTo(0, 0); }
+  function goMap() { setPaused(null); setRun(null); setDone(null); setLost(false); refreshBoard(); scrollTo(0, 0); }
   async function logout() { await api("/api/logout", {}).catch(() => {}); setMe(null); setRun(null); }
 
   if (loading) return <div className="wrap"><p className="label">טוען את המשמרת...</p></div>;
@@ -132,8 +143,9 @@ export function Game() {
         </div>
         <div className="bar-tools">
           {timeLeft !== null && !run?.solved && (
-            <div className={`clock${timeLeft <= 300_000 ? " low" : ""}`} role="timer" aria-label="זמן שנותר">
+            <div className={`clock${paused !== null ? " paused" : timeLeft <= 300_000 ? " low" : ""}`} role="timer" aria-label="זמן שנותר">
               <span>{level?.final?.clockLabel}</span><output>{mmss(timeLeft)}</output>
+              <button className="clockbtn" type="button" onClick={() => void togglePause(paused === null)} aria-label={paused === null ? "עצירת הזמן" : "המשך הזמן"} title={paused === null ? "עצירת הזמן" : "המשך הזמן"}>{paused === null ? "⏸" : "▶"}</button>
             </div>
           )}
           {me && <span className="pill"><span className="star">★</span><b>{t!.stars}</b></span>}

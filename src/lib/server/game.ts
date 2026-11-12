@@ -9,7 +9,7 @@ import { HttpError } from "./http";
 export interface Progress { [level: number]: { stars: number; ms: number } }
 interface AttemptRow {
   id: string; player_id: string; level: number; started_at: Date; deadline_at: Date | null;
-  completed_at: Date | null; failed_at: Date | null; wrong: number; hints: number; bonus_used: boolean;
+  completed_at: Date | null; failed_at: Date | null; paused_at: Date | null; wrong: number; hints: number; bonus_used: boolean;
 }
 
 const BEST = `
@@ -90,7 +90,8 @@ export async function submitAnswer(playerId: string, n: number, attemptId: strin
   const level = levelOrThrow(n);
   const a = await openAttempt(playerId, n, attemptId);
   const db = await getDb();
-  if (a.deadline_at && now > a.deadline_at) return expire(a.id, now);
+  const clock = a.paused_at ?? now;
+  if (a.deadline_at && clock > a.deadline_at) return expire(a.id, now);
 
   const final = !!level.final;
   if (final !== Array.isArray(answer)) throw new HttpError(400, final ? "בשלב הזה שולחים שני ממצאים" : "בשלב הזה שולחים תשובה אחת");
@@ -102,7 +103,7 @@ export async function submitAnswer(playerId: string, n: number, attemptId: strin
     let deadline = a.deadline_at;
     if (deadline) deadline = new Date(deadline.getTime() - WRONG_PENALTY_S * 1000);
     await db.query("UPDATE attempts SET wrong = wrong + 1, deadline_at = $2 WHERE id = $1", [a.id, deadline]);
-    if (deadline && now > deadline) return expire(a.id, now);
+    if (deadline && clock > deadline) return expire(a.id, now);
     return { correct: false as const, feedback: verdict.feedback, deadline: deadline?.toISOString() ?? null, serverNow: now.toISOString() };
   }
 
@@ -111,20 +112,21 @@ export async function submitAnswer(playerId: string, n: number, attemptId: strin
   await db.query("UPDATE attempts SET completed_at = $2, stars = $3, duration_ms = $4 WHERE id = $1", [a.id, now, stars, durationMs]);
   return {
     correct: true as const, feedback: verdict.feedback, stars, durationMs,
-    timeLeftMs: a.deadline_at ? a.deadline_at.getTime() - now.getTime() : null,
+    timeLeftMs: a.deadline_at ? a.deadline_at.getTime() - clock.getTime() : null,
     wrong: a.wrong, hints: a.hints, progress: await progressOf(playerId),
   };
 }
 
 export async function useHint(playerId: string, n: number, attemptId: string, now = new Date()) {
   const a = await openAttempt(playerId, n, attemptId);
-  if (a.deadline_at && now > a.deadline_at) return expire(a.id, now);
+  const clock = a.paused_at ?? now;
+  if (a.deadline_at && clock > a.deadline_at) return expire(a.id, now);
   const text = hintFor(n, a.hints);
   if (!text) throw new HttpError(409, "אין עוד רמזים בשלב הזה");
   const deadline = a.deadline_at ? new Date(a.deadline_at.getTime() - HINT_PENALTY_S * 1000) : null;
   const db = await getDb();
   await db.query("UPDATE attempts SET hints = hints + 1, deadline_at = $2 WHERE id = $1", [a.id, deadline]);
-  if (deadline && now > deadline) return expire(a.id, now);
+  if (deadline && clock > deadline) return expire(a.id, now);
   return { hint: text, used: a.hints + 1, deadline: deadline?.toISOString() ?? null, serverNow: now.toISOString() };
 }
 
@@ -137,6 +139,26 @@ export async function claimSecret(playerId: string, n: number, attemptId: string
   const db = await getDb();
   await db.query("UPDATE attempts SET bonus_used = true, deadline_at = $2 WHERE id = $1", [a.id, deadline]);
   return { bonus: true, deadline: deadline.toISOString(), serverNow: now.toISOString() };
+}
+
+/**
+ * Stopping the clock freezes the incident deadline on the server: while it is
+ * stopped time does not run out, and resuming moves the deadline forward.
+ */
+export async function setPaused(playerId: string, n: number, attemptId: string, pause: boolean, now = new Date()) {
+  const a = await openAttempt(playerId, n, attemptId);
+  if (!a.deadline_at) throw new HttpError(400, "רק משימות אירוע עם שעון אפשר לעצור");
+  const db = await getDb();
+  if (pause) {
+    if (a.paused_at) return { paused: true, timeLeftMs: a.deadline_at.getTime() - a.paused_at.getTime() };
+    if (now > a.deadline_at) return expire(a.id, now);
+    await db.query("UPDATE attempts SET paused_at = $2 WHERE id = $1", [a.id, now]);
+    return { paused: true, timeLeftMs: a.deadline_at.getTime() - now.getTime() };
+  }
+  if (!a.paused_at) return { paused: false, deadline: a.deadline_at.toISOString(), serverNow: now.toISOString() };
+  const deadline = new Date(a.deadline_at.getTime() + (now.getTime() - a.paused_at.getTime()));
+  await db.query("UPDATE attempts SET paused_at = NULL, deadline_at = $2 WHERE id = $1", [a.id, deadline]);
+  return { paused: false, deadline: deadline.toISOString(), serverNow: now.toISOString() };
 }
 
 /* ---------------- leaderboard and admin ---------------- */
